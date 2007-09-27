@@ -1,0 +1,64 @@
+<project name="Cocoon components" default="jar" basedir=".">
+
+  <description>
+    These Cocoon components have been released under the Apache 2.0 license.
+    They were originally developed by Be Value (www.be-value.nl).
+
+    The default 'jar' target creates a jar file with these components.
+    You can use the install targets to install the components.
+    You must have defined the COCOON environment variable,
+    because it is used to find the Cocoon jars.
+  </description>
+
+  <property environment="env"/>
+  <property name="cocoon.lib" location="${env.COCOON}/webapp/WEB-INF/lib"/>
+  <property name="cocoon.xconf" location="${env.COCOON}/webapp/WEB-INF/cocoon.xconf"/>
+  <property name="src" location="src"/>
+  <property name="lib" location="lib"/>
+  <property name="build" location="build"/>
+  <property name="jarfile" location="BeValueCocoonComponents.jar"/>
+
+  <target name="init">
+    <mkdir dir="${build}"/>
+  </target>
+
+  <target name="compile" depends="init" description="compile all sources" >
+    <javac srcdir="${src}" destdir="${build}" debug="true">
+      <classpath>
+        <pathelement path="${classpath}"/>
+        <fileset dir="${cocoon.lib}">
+          <include name="**/*.jar"/>
+        </fileset>
+<!--
+        <fileset dir="${lib}">
+          <include name="*.jar"/>
+        </fileset>
+-->
+      </classpath>
+    </javac>
+  </target>
+
+  <target name="jar" depends="compile" description="generate the jar-file" >
+    <jar jarfile="${jarfile}" basedir="${build}"/>
+  </target>
+
+  <target name="cocoon.xconf" description="Edit cocoon.xconf">
+    <xslt style="cocoon.xconf.xsl" force="true"
+        in="${cocoon.xconf}" out="${cocoon.xconf}.new">
+    </xslt>
+    <move file="${cocoon.xconf}" tofile="${cocoon.xconf}.bak" failonerror="true"/>
+    <move file="${cocoon.xconf}.new" tofile="${cocoon.xconf}" failonerror="true"/>
+  </target>
+
+  <target name="install" depends="jar, cocoon.xconf" description="install into Cocoon">
+    <copy todir="${cocoon.lib}" file="${jarfile}"/>
+    <copy todir="${cocoon.lib}">
+      <fileset dir="${lib}"><include name="*.jar"/></fileset>
+    </copy>
+  </target>
+
+  <target name="clean" description="clean up" >
+    <delete dir="${build}"/>
+  </target>
+
+</project>
