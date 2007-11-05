@@ -32,6 +32,10 @@ import org.xml.sax.SAXException;
  *         <map:parameter name="fragment.element" value="fragment"/>
  *       </map:transform>
  * </pre>
+ * The multifragment transformer will apply the stylesheet 'multifragment.xsl' to all fragments in the input document.
+ * A fragment is a sub-document demarcated by an element with the name indicated by the 'fragment.element' parameter,
+ * in the namespace indicated by the 'fragment.namespace' parameter. Other parameters are passed on to the stylesheet.
+ * If the fragment-element is not in the namespace, the 'fragment.namespace' parameter must be omitted.
  *
  * @author <a href="mailto:nverwer@be-value.nl">Nico Verwer</a>
  * @version 2007-02-19

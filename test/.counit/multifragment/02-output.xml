@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<a>
+  <b i="1">
+    <c processed="yes"/>
+  </b>
+  <b i="2">
+    <c processed="yes"/>
+  </b>
+</a>
