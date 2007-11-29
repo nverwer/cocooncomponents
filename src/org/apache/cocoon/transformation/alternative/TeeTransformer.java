@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Map;
 
+import org.apache.avalon.framework.logger.Logger;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
@@ -22,7 +23,7 @@ public class TeeTransformer extends AbstractSAXTransformer {
   @Override
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters params)
   throws ProcessingException, SAXException, IOException {
-    teeXmlConsumer = new TeeXMLConsumer(src);
+    teeXmlConsumer = new TeeXMLConsumer(getLogger(), resolver, objectModel, src, params);
     super.setup(resolver, objectModel, src, params);
   }
 
@@ -133,19 +134,22 @@ public class TeeTransformer extends AbstractSAXTransformer {
     super.startPrefixMapping(prefix, uri);
   }
   
-  private class TeeXMLConsumer extends AbstractXMLConsumer {
+  private class TeeXMLConsumer extends AbstractSAXTransformer {
 
     private PrintStream tee;
 
-    public TeeXMLConsumer(String src) throws FileNotFoundException {
+    public TeeXMLConsumer(Logger logger, SourceResolver resolver, Map objectModel, String src, Parameters params)
+    throws ProcessingException, SAXException, IOException {
+      enableLogging(logger);
+      setup(resolver, objectModel, src, params);
       tee = new PrintStream(new FileOutputStream(src), true);
     }
 
     @Override
     public void endDocument() throws SAXException {
       try {
-        String serializedXML = endSerializedXMLRecording();
-        tee.print(serializedXML);
+        String document = endSerializedXMLRecording();
+        tee.print(document);
       } catch (ProcessingException e) {
         throw new SAXException(e.getMessage());
       }
