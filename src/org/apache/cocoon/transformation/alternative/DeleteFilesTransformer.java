@@ -1,4 +1,4 @@
-package org.apache.cocoon.transformation;
+package org.apache.cocoon.transformation.alternative;
 
 import java.io.File;
 import java.io.IOException;
