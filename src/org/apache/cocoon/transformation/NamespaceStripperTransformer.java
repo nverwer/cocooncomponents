@@ -50,7 +50,7 @@ public class NamespaceStripperTransformer extends AbstractTransformer {
   }
 
   public void startElement(String uri, String loc, String raw, Attributes a) throws SAXException {
-    if (uri != null && !uri.equals("")) {
+    if (uri != null && !uri.equals("") && raw.contains(":")) {
       String prefix = raw.substring(0, raw.indexOf(':'));
       enterPrefix(prefix, uri);
     }
@@ -70,7 +70,7 @@ public class NamespaceStripperTransformer extends AbstractTransformer {
 
   public void endElement(String uri, String loc, String raw) throws SAXException {
     super.endElement(uri, loc, raw);
-    if (uri != null && !uri.equals("")) {
+    if (uri != null && !uri.equals("") && raw.contains(":")) {
       String prefix = raw.substring(0, raw.indexOf(':'));
       leavePrefix(prefix);
     }
