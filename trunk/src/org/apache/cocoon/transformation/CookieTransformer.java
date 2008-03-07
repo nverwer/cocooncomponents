@@ -37,7 +37,7 @@ import org.xml.sax.SAXException;
  * <b>To set a cookie:</b>
  * 
  * <pre>
- * &lt;cookie:setCookie name="cookie-name" value="cookie-value" maxAge="max" path="/" xmlns:cookie="http://apache.org/cocoon/transformation/cookie"&gt;
+ * &lt;cookie:setCookie name="cookie-name" value="cookie-value" maxAge="max" domain="cookie.com" path="/" xmlns:cookie="http://apache.org/cocoon/transformation/cookie"&gt;
  * </pre>
  * sets the specified cookie.
  * The maxAge="max" specifies the largest possible maximum age of a cookie,
@@ -91,7 +91,10 @@ import org.xml.sax.SAXException;
  *   <td>maxAge</td><td>the maximum age in seconds of the cookie</td><td>optional</td><td>-1 (until browser quits)</td>   
  * </tr>
  * <tr>
- *   <td>path</td><td>the path of the cookie</td><td>optional</td><td>current-path</td>   
+ *   <td>domain</td><td>the domain of the cookie</td><td>optional</td><td>current domain</td>   
+ * </tr>
+ * <tr>
+ *   <td>path</td><td>the path of the cookie</td><td>optional</td><td>current path</td>   
  * </tr>
  * </table>
  * <br/>
@@ -106,6 +109,7 @@ public class CookieTransformer extends AbstractSAXTransformer {
   public static final String GET_COOKIE_TAG = "getCookie";
   public static final String SET_CRUMBS_TAG = "setCrumbs";
   public static final String GET_CRUMBS_TAG = "getCrumbs";
+  private static final String DOMAIN_ATTR = "domain";
   public static final String PATH_ATTR = "path";
   public static final String NAME_ATTR = "name";
   public static final String VALUE_ATTR = "value";
@@ -117,6 +121,7 @@ public class CookieTransformer extends AbstractSAXTransformer {
   private HashMap<String, String> crumbs;
   private String cookieName;
   private String maxAge;
+  private String domain;
   private String path;
 
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters params)
@@ -132,7 +137,7 @@ public class CookieTransformer extends AbstractSAXTransformer {
   {
     String nsPrefix = (qName.contains(":") ? qName.substring(0, qName.indexOf(':')+1) : "");
     if (localName.equals(SET_COOKIE_TAG)) {
-      setCookie(attr.getValue(NAME_ATTR), attr.getValue(VALUE_ATTR), attr.getValue(MAX_AGE_ATTR), attr.getValue(PATH_ATTR));
+      setCookie(attr.getValue(NAME_ATTR), attr.getValue(VALUE_ATTR), attr.getValue(MAX_AGE_ATTR), attr.getValue(DOMAIN_ATTR), attr.getValue(PATH_ATTR));
       /* Don't provide a result, similar to the SessionTransformer. */
     } else if (localName.equals(GET_COOKIE_TAG)) {
       if (null != request.getCookies()) {
@@ -147,6 +152,7 @@ public class CookieTransformer extends AbstractSAXTransformer {
       cookieName = attr.getValue(NAME_ATTR);
       crumbs = new HashMap<String, String>();
       maxAge = attr.getValue(MAX_AGE_ATTR);
+      domain = attr.getValue(DOMAIN_ATTR);
       path = attr.getValue(PATH_ATTR);
     } else if (localName.equals(CRUMB_TAG)) {
       crumbs.put(attr.getValue(NAME_ATTR), attr.getValue(VALUE_ATTR));
@@ -182,13 +188,16 @@ public class CookieTransformer extends AbstractSAXTransformer {
                  "="+
                  URLEncoder.encode(crumbs.get(name), "UTF-8");
       }
-      setCookie(cookieName, value, maxAge, path);
+      setCookie(cookieName, value, maxAge, domain, path);
     }
   }
   
-  private void setCookie(String name, String value, String maxAge, String path) {
+  private void setCookie(String name, String value, String maxAge, String domain, String path) {
     Cookie cookie = new HttpCookie(name, value);
     cookie.setMaxAge(maxAge == null ? -1 : (maxAge.equals("max") ? MAX_AGE : Integer.parseInt(maxAge)));
+    if (domain != null) {
+      cookie.setDomain(domain);
+    }
     if (path != null) {
       cookie.setPath(path);
     }
