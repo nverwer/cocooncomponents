@@ -16,6 +16,8 @@
 package org.apache.cocoon.components.modules.input;
 
 import java.util.*;
+
+import org.apache.avalon.framework.component.Component;
 import org.apache.avalon.framework.component.ComponentException;
 import org.apache.avalon.framework.component.ComponentManager;
 import org.apache.avalon.framework.component.Composable;
@@ -73,7 +75,7 @@ public class SitemapPathModule extends AbstractInputModule  implements Composabl
       if (this.getLogger().isErrorEnabled())
         this.getLogger().error("Exception obtaining source resolver ", e);
     } finally {
-      if (resolver != null) this.manager.release(resolver);
+      if (resolver != null) this.manager.release((Component)resolver);
     }
     return fullPath;
   }
