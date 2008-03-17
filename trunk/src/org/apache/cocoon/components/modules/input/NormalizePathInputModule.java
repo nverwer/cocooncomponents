@@ -9,7 +9,10 @@ public class NormalizePathInputModule extends AbstractInputModule {
 
   @Override
   public Object getAttribute(String name, Configuration modeConf, Map objectModel) throws ConfigurationException {
-    return name.replaceAll("/[^/]+/\\.\\.", "");
+    while (name.matches(".*/[^/]+/\\.\\..*")) {
+      name = name.replaceAll("/[^/]+/\\.\\.", "");
+    }
+    return name;
   }
 
 }
