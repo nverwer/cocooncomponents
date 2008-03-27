@@ -30,7 +30,7 @@ import org.xml.sax.SAXException;
 public class UriGenerator extends FileGenerator {
 
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters par)
-        throws ProcessingException, SAXException, IOException {
-        super.setup(resolver, objectModel, NetUtils.parameterize(src, Parameters.toProperties(par)), par);
-    }
+    throws ProcessingException, SAXException, IOException {
+    super.setup(resolver, objectModel, NetUtils.parameterize(src, Parameters.toProperties(par)), par);
+  }
 }
