@@ -224,6 +224,8 @@ public class HtmlMailTransformer extends AbstractSAXTransformer {
     props.setProperty("mail.transport.protocol", "smtp");
     props.setProperty("mail.smtp.host", smtpHost);
     props.setProperty("mail.smtp.port", smtpPort);
+    props.setProperty("mail.smtp.localhost","localhost");
+
     Authenticator auth = null;
     if (smtpUser.length() > 0) {
       props.put("mail.smtp.auth", "true");
