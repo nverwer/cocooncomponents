@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<map:components xmlns:map="http://apache.org/cocoon/sitemap/1.0">
+    <map:generators>
+        <map:generator name="request-param"
+                src="org.apache.cocoon.generation.RequestParameterGenerator" label="content"
+                logger="sitemap.generator" pool-grow="4" pool-max="32" pool-min="8"/>
+    </map:generators>
+    <map:selectors>
+        <map:selector name="request-remoteAddr"
+                src="org.apache.cocoon.selection.RegexpInputModuleSelector">
+            <module>request</module>
+            <attribute>remoteAddr</attribute>
+            <pattern name="localhost">127.0.0.1
+            </pattern>
+        </map:selector>
+    </map:selectors>
+    <map:transformers default="xslt">
+        <map:transformer name="strip-namespaces"
+                src="org.apache.cocoon.transformation.NamespaceStripperTransformer"
+                logger="sitemap.transformer"/>
+        <map:transformer name="cookie" src="org.apache.cocoon.transformation.CookieTransformer"/>
+        <map:transformer name="multifragment-xslt" logger="sitemap.transformer.xslt"
+                pool-grow="2" pool-max="400" pool-min="8"
+                src="org.apache.cocoon.transformation.MultiFragmentTraxTransformer">
+            <use-request-parameters>false</use-request-parameters>
+            <use-session-parameters>false</use-session-parameters>
+            <use-cookie-parameters>false</use-cookie-parameters>
+            <xslt-processor-role>xalan</xslt-processor-role>
+            <check-includes>true</check-includes>
+        </map:transformer>
+        <map:transformer name="multifragment-saxon" logger="sitemap.transformer.xslt"
+                pool-grow="2" pool-max="400" pool-min="8"
+                src="org.apache.cocoon.transformation.MultiFragmentTraxTransformer">
+            <use-request-parameters>false</use-request-parameters>
+            <use-session-parameters>false</use-session-parameters>
+            <use-cookie-parameters>false</use-cookie-parameters>
+            <xslt-processor-role>saxon</xslt-processor-role>
+            <check-includes>true</check-includes>
+        </map:transformer>
+        <map:transformer name="html-char"
+                src="org.apache.cocoon.transformation.HTMLCharacterTransformer"
+                logger="sitemap.transformer"/>
+    </map:transformers>
+</map:components>
