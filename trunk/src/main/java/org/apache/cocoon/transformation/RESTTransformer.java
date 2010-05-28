@@ -65,10 +65,11 @@ import org.xml.sax.SAXException;
  *		
  * &lt;map:transformer name="rest"
  *	src="org.apache.cocoon.transformation.RESTTransformer" logger="rest"&gt;
- *	&lt;authentication&gt;
- *   &lt;username/&gt;
- *   &lt;password/&gt;
- *	&lt;authentication/&gt;
+ *	&lt;
+ *
+ *
+ *
+ * /&gt;
  * &lt;/map:transformer&gt;
  * </pre>
  * 
@@ -82,6 +83,7 @@ import org.xml.sax.SAXException;
  *	src="org.apache.cocoon.transformation.RESTTransformer" logger="rest"&gt;
  *	&lt;map:parameter name="username" value="user"/&gt;
  *	&lt;map:parameter name="password" value="secret"/&gt;
+ *	&lt;map:parameter name="preemptive-authentication" value="true"/&gt;
  * &lt;/map:transformer&gt;
  * </pre>
  * 
@@ -176,6 +178,7 @@ import org.xml.sax.SAXException;
  *   &lt;/rest:request&gt;
  *
  * @author Hubert A. Klein Ikkink
+ * @author Huib Verweij
  */
 public class RESTTransformer extends AbstractSAXTransformer
         implements Disposable {
@@ -199,6 +202,7 @@ public class RESTTransformer extends AbstractSAXTransformer
     private static final String METHOD_DELETE = "DELETE";
     private static HttpClient client = new HttpClient(new MultiThreadedHttpConnectionManager());
     private static AuthScope authScope = new AuthScope(AuthScope.ANY_HOST, AuthScope.ANY_PORT, AuthScope.ANY_REALM);
+    private boolean preemptive_authentication;
     private HttpState m_state = null;
     private String m_method = null;
     private String m_target = null;
@@ -213,7 +217,8 @@ public class RESTTransformer extends AbstractSAXTransformer
     public void configure(Configuration configuration) throws 
             ConfigurationException {
         super.configure(configuration);
-        
+
+        preemptive_authentication = false;
         m_state = new HttpState();
         
         final Configuration authentication = configuration.getChild("authentication");
@@ -226,6 +231,12 @@ public class RESTTransformer extends AbstractSAXTransformer
                         authentication.getChild("username").getValue(""),
                         authentication.getChild("password").getValue("")));
             }
+            if (null != authentication.getChild("preemptive-authentication")) {
+                preemptive_authentication = Boolean.parseBoolean(authentication.getChild("preemptive-authentication").getValue("false"));
+                if (getLogger().isDebugEnabled()) {
+                    getLogger().debug("Setting preemptive-authentication from configuration: "+preemptive_authentication+".");
+                }
+            }
         }
     }
 
@@ -234,6 +245,13 @@ public class RESTTransformer extends AbstractSAXTransformer
             throws ProcessingException, SAXException, IOException {
         super.setup(resolver, objectModel, src, par);
 
+
+        if (null != par.getParameter("preemptive-authentication", null)) {
+            preemptive_authentication = Boolean.parseBoolean(par.getParameter("preemptive-authentication", "false"));
+            if (getLogger().isDebugEnabled()) {
+                getLogger().debug("Setting preemptive-authentication in setup(): "+preemptive_authentication+".");
+            }
+        }
         if (null != par.getParameter("username", null)) {
             m_state.setCredentials(authScope, new UsernamePasswordCredentials(
                     par.getParameter("username", ""),
@@ -337,6 +355,7 @@ public class RESTTransformer extends AbstractSAXTransformer
 
                 method.setDoAuthentication(true);
 
+
                 // execute the request
                 executeRequest(method);
             } catch (ProcessingException e) {
@@ -364,6 +383,10 @@ public class RESTTransformer extends AbstractSAXTransformer
 
     private void executeRequest(HttpMethod method) throws SAXException {
         try {
+            if (getLogger().isDebugEnabled()) {
+                getLogger().debug("using preemptive-authentication="+preemptive_authentication+".");
+            }
+            client.getParams().setAuthenticationPreemptive(preemptive_authentication);
             client.executeMethod(method.getHostConfiguration(), method, m_state);
 
             super.contentHandler.startPrefixMapping("rest", NS_URI);
