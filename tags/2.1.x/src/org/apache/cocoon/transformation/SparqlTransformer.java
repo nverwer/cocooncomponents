@@ -33,6 +33,7 @@ import org.apache.avalon.framework.service.ServiceException;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.components.source.SourceUtil;
 import org.apache.cocoon.environment.SourceResolver;
+import org.apache.cocoon.xml.AttributesImpl;
 import org.apache.cocoon.xml.IncludeXMLConsumer;
 import org.apache.cocoon.xml.XMLUtils;
 import org.apache.commons.httpclient.HttpClient;
@@ -54,6 +55,7 @@ import org.xml.sax.SAXException;
  * The mandatory <code>src</code> attribute contains the url of a SPARQL endpoint.
  * The optional <code>method</code> attribute contains the HTTP method for the request (default is GET). AT the moment, we only do GET and POST.
  * The optional <code>parse</code> attribute indicates how the response should be parsed. It can be "xml" or "text". Default is "xml".
+ * The optional <code>showErrors</code> attribute can be "true" (default; generate XML elements for HTTP errors) or false (throw exceptions for HTTP errors).
  * Attributes in the "http://www.w3.org/2006/http#" namespace are used as request headers. The header name is the local name of the attribute.
  * Attributes in the "http://apache.org/cocoon/sparql/1.0" namespace are used as request parameters. The parameter name is the local name of the attribute.
  * The text content of the <code>query</code> element is passed as the value of the 'query' parameter.
@@ -89,6 +91,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
   public static final String QUERY_ELEMENT = "query";
   public static final String METHOD_ATTR = "method";
   public static final String PARSE_ATTR = "parse";
+  public static final String SHOW_ERRORS_ATTR = "showErrors";
   public static final String SRC_ATTR = "src";
   public static final String QUERY_PARAM = "query";
   
@@ -96,6 +99,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
   private String src;
   private String method;
   private String parse;
+  private boolean showErrors;
   private Map httpHeaders;
   private SourceParameters requestParameters;
 
@@ -108,6 +112,10 @@ public class SparqlTransformer extends AbstractSAXTransformer {
     super.setup(resolver, objectModel, src, params);
     inQuery = false;
   }
+  
+  private String getAttribute(Attributes attr, String name, String defaultValue) {
+    return (attr.getIndex(name) > 0) ? attr.getValue(name) : defaultValue;
+  }
 
   public void startTransformingElement(String uri, String name, String raw, Attributes attr)
       throws ProcessingException, IOException, SAXException {
@@ -116,12 +124,11 @@ public class SparqlTransformer extends AbstractSAXTransformer {
         throw new ProcessingException("Nested SPARQL queries are not allowed.");
       }
       inQuery = true;
-      src = attr.getValue(SRC_ATTR);
+      src = getAttribute(attr, SRC_ATTR, null);
       if (src == null) throw new ProcessingException("The "+SRC_ATTR+" attribute is mandatory for "+QUERY_ELEMENT+" elements.");
-      method = attr.getValue(METHOD_ATTR);
-      if (method == null) method = "GET";
-      parse = attr.getValue(PARSE_ATTR);
-      if (parse == null) parse = "xml";
+      method = getAttribute(attr, METHOD_ATTR, "GET");
+      parse = getAttribute(attr, PARSE_ATTR, "xml");
+      showErrors = getAttribute(attr, SHOW_ERRORS_ATTR, "true").charAt(0) == 't';
       requestParameters = new SourceParameters();
       httpHeaders = new HashMap();
       for (int i = 0; i < attr.getLength(); ++i) {
@@ -174,8 +181,20 @@ public class SparqlTransformer extends AbstractSAXTransformer {
     } catch (HttpException e) {
       throw new IOException(e);
     }
-    if (responseCode < 200 || responseCode >= 300)
-      throw new ProcessingException("Received HTTP status code "+responseCode);
+    // Handle errors, if any.
+    if (responseCode < 200 || responseCode >= 300) {
+      if (showErrors) {
+        AttributesImpl attrs = new AttributesImpl();
+        attrs.addCDATAAttribute("status", ""+responseCode);
+        xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error", attrs);
+        String responseBody = httpMethod.getResponseBodyAsString();
+        xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
+        xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error");
+        return; // Not a nice, but quick and dirty way to end.
+      } else {
+        throw new ProcessingException("Received HTTP status code "+responseCode+":\n"+httpMethod.getResponseBodyAsString());
+      }
+    }
     // Parse the response
     XMLizer xmlizer = null;
     try {
@@ -197,10 +216,6 @@ public class SparqlTransformer extends AbstractSAXTransformer {
     } finally {
         manager.release((Component) xmlizer);
     }
-//    Parameters typeParameters = new Parameters();
-//    typeParameters.setParameter("method", method);
-//    Source source = SourceUtil.getSource(src, typeParameters, requestParameters, resolver);
-//    SourceUtil.toSAX(source, this.xmlConsumer, typeParameters, true);
   }
 
 }
