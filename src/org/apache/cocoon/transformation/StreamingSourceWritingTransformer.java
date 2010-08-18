@@ -1,5 +1,6 @@
-/* Transformer die SAX events direct serialiseert naar een OutputStream.
- * BUG: Hoewel de input dezelfde is als voor SourceWritingTransformer, genereert deze nog geen output elementen.
+/* This transformer serializes SAX events directly into an OutputStream.
+ * BUG: Only source:write has been implemented.
+ * BUG: No output elements are generated.
  */
 
 package org.apache.cocoon.transformation;
@@ -79,12 +80,32 @@ public class StreamingSourceWritingTransformer extends AbstractSAXTransformer {
         contentHandler = fileHandler;
         fileHandler.startDocument();
       } else {
+        throw new ProcessingException("Unknown element "+raw);
       }
+  }
+  
+  public void sendSimpleElement(String localname, String textContent) throws SAXException {
+    // Why do sendStartElementEvent and others call the NS triggers again?
+    try {
+      super.sendStartElementEventNS(localname);
+      super.sendTextEvent(textContent);
+      super.sendEndElementEventNS(localname);
+    } catch (Exception e) {
+      throw new SAXException(e);
+    }
   }
 
   public void endTransformingElement(String uri, String name, String raw)
   throws SAXException, IOException, ProcessingException {
       if (name.equals(WRITE_ELEMENT)) {
+//        sendStartElementEvent("sourceResult");
+//        sendSimpleElement("execution", "success");
+//        sendSimpleElement("message", "entire source overwritten");
+//        sendSimpleElement("behaviour", "write");
+//        sendSimpleElement("action", "overwritten");
+//        sendSimpleElement("source", filename);
+//        sendSimpleElement("serializer", "xml");
+//        sendEndElementEvent("sourceResult");
       } else if (name.equals(SOURCE_ELEMENT)) {
         filename = this.endTextRecording();
         Source source = this.resolver.resolveURI(filename);
@@ -97,6 +118,7 @@ public class StreamingSourceWritingTransformer extends AbstractSAXTransformer {
         fileHandler = null;
         contentHandler = pipelineHandler;
       } else {
+        throw new ProcessingException("Unknown element "+raw);
       }
   }
 

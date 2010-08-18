@@ -23,6 +23,7 @@ import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.components.source.SourceUtil;
 import org.apache.cocoon.environment.SourceResolver;
+import org.apache.cocoon.xml.AttributesImpl;
 import org.apache.excalibur.source.Source;
 import org.apache.excalibur.source.SourceParameters;
 import org.xml.sax.Attributes;
@@ -34,6 +35,7 @@ import org.xml.sax.SAXException;
  * These elements must not be nested.
  * The <code>src</code> attribute contains the url which points to a SPARQL endpoint.
  * The optional <code>method</code> attribute contains the HTTP method for the request (default is GET).
+ * The optional <code>encoding</code> attribute contains the HTTP encoding for the request (default is ISO-8859-1).
  * Attributes in the "http://apache.org/cocoon/sparql/1.0" namespace are used as request parameters (using the local name).
  * This allows for parameters such as 'format' or 'maxrows'.
  * The text of the content of the <code>query</code> element is passed as the value of the 'query' parameter.
@@ -64,11 +66,13 @@ public class SparqlTransformer extends AbstractSAXTransformer {
   public static final String QUERY_ELEMENT = "query";
   public static final String METHOD_ATTR = "method";
   public static final String SRC_ATTR = "src";
+  public static final String ENCODING_ATTR = "encoding";
   public static final String QUERY_PARAM = "query";
   
   private boolean inQuery;
   private String src;
   private String method;
+  private String encoding;
   private SourceParameters requestParameters;
 
   public SparqlTransformer() {
@@ -90,7 +94,9 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       inQuery = true;
       src = attr.getValue(SRC_ATTR);
       method = attr.getValue(METHOD_ATTR);
-      method = (method == null ? "GET" : method.toUpperCase());
+      if (method == null) method = "GET";
+      encoding = attr.getValue(ENCODING_ATTR);
+      if (encoding == null) encoding = System.getProperty("file.encoding", "ISO-8859-1"); 
       requestParameters = new SourceParameters();
       for (int i = 0; i < attr.getLength(); ++i) {
         if (attr.getURI(i).equals(SPARQL_NAMESPACE_URI)) {
@@ -109,6 +115,8 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       requestParameters.setParameter(QUERY_PARAM, query);
       Parameters typeParameters = new Parameters();
       typeParameters.setParameter("method", method);
+      typeParameters.setParameter("encoding", encoding);
+      //typeParameters.setParameter("mime-type", ...) // mime-type hint
       Source source = SourceUtil.getSource(src, typeParameters, requestParameters, resolver);
       SourceUtil.toSAX(source, this.xmlConsumer, typeParameters, true);
     }
