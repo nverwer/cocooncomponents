@@ -26,11 +26,11 @@
     <javac srcdir="${src}" destdir="${build}" debug="true" target="1.5">
       <classpath>
         <pathelement path="${classpath}"/>
-        <fileset dir="${cocoon.lib}">
-          <include name="**/*.jar"/>
-        </fileset>
         <fileset dir="${lib}">
           <include name="*.jar"/>
+        </fileset>
+        <fileset dir="${cocoon.lib}">
+          <include name="**/*.jar"/>
         </fileset>
       </classpath>
     </javac>
