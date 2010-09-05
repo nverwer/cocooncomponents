@@ -44,13 +44,18 @@ import org.xml.sax.SAXException;
  * These elements must not be nested.
  * The mandatory <code>src</code> attribute contains the url of a SPARQL endpoint.
  * The optional <code>method</code> attribute contains the HTTP method for the request (default is GET).
+ * For POST requests, parameters are sent in the body if the attribute http:Content-Type is "application/x-www-form-urlencoded".
+ * Note that the header name "Content-Type" is case sensitive!
+ * Otherwise, the request body is the content of the <code>query</code> element (text or XML).
  * The optional <code>content</code> attribute indicates if the content of the <code>query</code> element is "text" (default for SPARQL queries), or "xml" (useful if you PUT RDF triples).
  * The optional <code>parse</code> attribute indicates how the response should be parsed. It can be "xml" or "text". Default is "xml". Text will be wrapped in an XML element.
  * The optional <code>showErrors</code> attribute can be "true" (default; generate XML elements for HTTP errors) or false (throw exceptions for HTTP errors).
- * Attributes in the "http://www.w3.org/2006/http#" namespace are used as request headers. The header name is the local name of the attribute.
- * Attributes in the "http://apache.org/cocoon/sparql/1.0" namespace are used as request parameters. The parameter name is the local name of the attribute.
- * The text content of the <code>query</code> element is passed as the value of the 'query' parameter in GET and POST requests.
- * In PUT requests, is is the request entity (body). Note that this is text, even if you put RDF statements in it, so XML must be escaped.
+ * Attributes in the "http://www.w3.org/2006/http#" namespace are used as request headers.
+ * The header name is the local name of the attribute.
+ * Attributes in the "http://apache.org/cocoon/sparql/1.0" namespace are used as request parameters.
+ * The parameter name is the local name of the attribute.
+ * The text content of the <code>query</code> element is passed as the value of the 'query' parameter in GET and POST (www-form-urlencoded data) requests.
+ * In PUT requests, it is the request entity (body). Note that this is text, even if you put RDF statements in it, so XML must be escaped.
  * 
  * Exmple XML input, with content and parse attributes set to their default values:
  * <pre>
@@ -61,7 +66,8 @@ import org.xml.sax.SAXException;
  *     method="POST"
  *     content="text"
  *     parse="xml"
- *     http:accept="application/sparql-results+xml"
+ *     http:Content-Type="application/x-www-form-urlencoded"
+ *     http:Accept="application/sparql-results+xml"
  *     sparql:maxrows="25" sparql:format="XML"
  *   >
  *   <![CDATA[
@@ -89,6 +95,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
   public static final String SHOW_ERRORS_ATTR = "showErrors";
   public static final String SRC_ATTR = "src";
   public static final String QUERY_PARAM = "query";
+  public static final String HTTP_CONTENT_TYPE = "Content-Type";
   
   private boolean inQuery;
   private String src;
@@ -167,13 +174,22 @@ public class SparqlTransformer extends AbstractSAXTransformer {
     // Instantiate different HTTP methods.
     if ("GET".equalsIgnoreCase(method)) {
       httpMethod = new GetMethod(url);
+      // Do not use empty query parameter.
+      if (requestParameters.getParameter(QUERY_PARAM).trim().equals("")) requestParameters.removeParameter(QUERY_PARAM);
       httpMethod.setQueryString(requestParameters.getEncodedQueryString());
     } else if ("POST".equalsIgnoreCase(method)) {
       PostMethod httpPostMethod = new PostMethod(url);
-      Iterator parNames = requestParameters.getParameterNames();
-      while (parNames.hasNext()) {
-        String parName = (String) parNames.next();
-        httpPostMethod.addParameter(parName, requestParameters.getParameter(parName));
+      if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
+          httpHeaders.get(HTTP_CONTENT_TYPE).equals("application/x-www-form-urlencoded")) {
+        // Do not use empty query parameter.
+        if (requestParameters.getParameter(QUERY_PARAM).trim().equals("")) requestParameters.removeParameter(QUERY_PARAM);
+        Iterator parNames = requestParameters.getParameterNames();
+        while (parNames.hasNext()) {
+          String parName = (String) parNames.next();
+          httpPostMethod.addParameter(parName, requestParameters.getParameter(parName));
+        }
+      } else {
+        httpPostMethod.setRequestBody(requestParameters.getParameter(QUERY_PARAM));
       }
       httpMethod = httpPostMethod;
     } else if ("PUT".equalsIgnoreCase(method)) {
@@ -182,6 +198,11 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       requestParameters.removeParameter(QUERY_PARAM);
       httpPutMethod.setQueryString(requestParameters.getEncodedQueryString());
       httpMethod = httpPutMethod;
+    } else if ("DELETE".equalsIgnoreCase(method)) {
+      httpMethod = new DeleteMethod(url);
+      // Do not use empty query parameter.
+      if (requestParameters.getParameter(QUERY_PARAM).trim().equals("")) requestParameters.removeParameter(QUERY_PARAM);
+      httpMethod.setQueryString(requestParameters.getEncodedQueryString());
     } else {
       throw new ProcessingException("Unsupported method: "+method);
     }
