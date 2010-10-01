@@ -184,7 +184,7 @@ public class RESTTransformer extends AbstractSAXTransformer
         implements Disposable {
 
     private static final String NS_URI = "http://org.apache.cocoon.transformation/rest/1.0";
-    private static final String NS_PREFIX = "rest:";
+    private static final String NS_PREFIX = "rest";
     private static final String REQUEST_TAG = "request";
     private static final String METHOD_ATTR = "method";
     private static final String TARGET_ATTR = "target";
@@ -210,7 +210,7 @@ public class RESTTransformer extends AbstractSAXTransformer
     private DocumentFragment m_requestdocument = null;
 
     public RESTTransformer() {
-        super.defaultNamespaceURI = "rest:";
+        super.defaultNamespaceURI = NS_URI;
     }
 
     @Override
@@ -381,6 +381,10 @@ public class RESTTransformer extends AbstractSAXTransformer
         }
     }
 
+    private String qName(String element) {
+        return NS_PREFIX + ":" + element;
+    }
+
     private void executeRequest(HttpMethod method) throws SAXException {
         try {
             if (getLogger().isDebugEnabled()) {
@@ -389,30 +393,30 @@ public class RESTTransformer extends AbstractSAXTransformer
             client.getParams().setAuthenticationPreemptive(preemptive_authentication);
             client.executeMethod(method.getHostConfiguration(), method, m_state);
 
-            super.contentHandler.startPrefixMapping("rest", NS_URI);
+            super.contentHandler.startPrefixMapping(NS_PREFIX, NS_URI);
 
             // start <response>
             AttributesImpl atts = new AttributesImpl();
             atts.addCDATAAttribute(TARGET_ATTR, m_target);
             atts.addCDATAAttribute(METHOD_ATTR, m_method);
-            super.contentHandler.startElement(NS_URI, RESPONSE_TAG, NS_PREFIX + RESPONSE_TAG, atts);
+            super.contentHandler.startElement(NS_URI, RESPONSE_TAG, qName(RESPONSE_TAG), atts);
             atts.clear();
 
             // <status>
             atts.addCDATAAttribute(CODE_ATTR, String.valueOf(method.getStatusCode()));
             atts.addCDATAAttribute(MSG_ATTR, method.getStatusText());
-            super.contentHandler.startElement(NS_URI, STATUS_TAG, NS_PREFIX + STATUS_TAG, atts);
+            super.contentHandler.startElement(NS_URI, STATUS_TAG, qName(STATUS_TAG), atts);
             atts.clear();
-            super.contentHandler.endElement(NS_URI, STATUS_TAG, NS_PREFIX + STATUS_TAG);
+            super.contentHandler.endElement(NS_URI, STATUS_TAG, qName(STATUS_TAG));
 
             // <header>s
             Header[] headers = method.getResponseHeaders();
             for (int i = 0; i < headers.length; i++) {
                 atts.addCDATAAttribute(NAME_ATTR, headers[i].getName());
                 atts.addCDATAAttribute(VALUE_ATTR, headers[i].getValue());
-                super.contentHandler.startElement(NS_URI, HEADER_TAG, NS_PREFIX + HEADER_TAG, atts);
+                super.contentHandler.startElement(NS_URI, HEADER_TAG, qName(HEADER_TAG), atts);
                 atts.clear();
-                super.contentHandler.endElement(NS_URI, HEADER_TAG, NS_PREFIX + HEADER_TAG);
+                super.contentHandler.endElement(NS_URI, HEADER_TAG, qName(HEADER_TAG));
             }
 
             // response <body>
@@ -428,7 +432,7 @@ public class RESTTransformer extends AbstractSAXTransformer
                     }
                 }
                 if (mimeType != null && mimeType.equals("text/xml")) {
-                    super.contentHandler.startElement(NS_URI, BODY_TAG, NS_PREFIX + BODY_TAG, atts);
+                    super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
                     IncludeXMLConsumer consumer = new IncludeXMLConsumer(super.contentHandler);
                     XMLizer xmlizer = null;
                     try {
@@ -439,14 +443,14 @@ public class RESTTransformer extends AbstractSAXTransformer
                     } finally {
                         manager.release(xmlizer);
                     }
-                    super.contentHandler.endElement(NS_URI, BODY_TAG, NS_PREFIX + BODY_TAG);
+                    super.contentHandler.endElement(NS_URI, BODY_TAG, qName(BODY_TAG));
                 }
             }
 
             // end <response>
-            super.contentHandler.endElement(NS_URI, RESPONSE_TAG, NS_PREFIX + RESPONSE_TAG);
+            super.contentHandler.endElement(NS_URI, RESPONSE_TAG, qName(RESPONSE_TAG));
 
-            super.contentHandler.endPrefixMapping(NS_URI);
+            super.contentHandler.endPrefixMapping(NS_PREFIX);
         } catch (HttpException e) {
             throw new SAXException("Error executing REST request. Server responded " + e.getReasonCode() + " (" + e.getReason() + ") - " + e.getMessage(), e);
         } catch (IOException e) {
