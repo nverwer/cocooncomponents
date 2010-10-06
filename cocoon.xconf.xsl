@@ -23,6 +23,7 @@
     <component-instance name="normalize-path" class="org.apache.cocoon.components.modules.input.NormalizePathInputModule" logger="core.modules.input"/>
     <component-instance name="first-non-empty" class="org.apache.cocoon.components.modules.input.FirstNonEmptyModule" logger="core.modules.input"/>
     <component-instance name="crumb" class="org.apache.cocoon.components.modules.input.CrumbInputModule" logger="core.modules.input"/>
+    <component-instance name="regexp" class="org.apache.cocoon.components.modules.input.RegExpMatchInputModule" logger="core.modules.input"/>
 	</xsl:copy>
 </xsl:template>
 <!-- Remove old definitions. -->
