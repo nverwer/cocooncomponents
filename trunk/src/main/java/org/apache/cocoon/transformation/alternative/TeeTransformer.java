@@ -140,7 +140,7 @@ public class TeeTransformer extends AbstractSAXTransformer {
         public TeeXMLConsumer(Log logger, SourceResolver resolver, Map objectModel, String src, Parameters params)
                 throws ProcessingException, SAXException, IOException {
             setup(resolver, objectModel, src, params);
-            tee = new PrintStream(new FileOutputStream(src), true);
+            tee = new PrintStream(new FileOutputStream(src), true, "UTF-8");
         }
 
         @Override
