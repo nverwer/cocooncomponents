@@ -35,6 +35,7 @@ import org.apache.commons.httpclient.methods.GetMethod;
 import org.apache.commons.httpclient.methods.PostMethod;
 import org.apache.commons.httpclient.methods.PutMethod;
 import org.apache.commons.httpclient.methods.StringRequestEntity;
+import org.apache.commons.io.IOUtils;
 import org.apache.excalibur.xmlizer.XMLizer;
 import org.w3c.dom.DocumentFragment;
 import org.xml.sax.Attributes;
@@ -185,6 +186,9 @@ public class RESTTransformer extends AbstractSAXTransformer
 
     private static final String NS_URI = "http://org.apache.cocoon.transformation/rest/1.0";
     private static final String NS_PREFIX = "rest";
+    private static final String SETUP_PASSWORD_ATTR = "password";
+    private static final String SETUP_PREEMPTIVEAUTHENTICATION_ATTR = "preemptive-authentication";
+    private static final String SETUP_USERNAME_ATTR = "username";
     private static final String REQUEST_TAG = "request";
     private static final String METHOD_ATTR = "method";
     private static final String TARGET_ATTR = "target";
@@ -202,39 +206,41 @@ public class RESTTransformer extends AbstractSAXTransformer
     private static final String METHOD_DELETE = "DELETE";
     private static HttpClient client = new HttpClient(new MultiThreadedHttpConnectionManager());
     private static AuthScope authScope = new AuthScope(AuthScope.ANY_HOST, AuthScope.ANY_PORT, AuthScope.ANY_REALM);
-    private boolean preemptive_authentication;
+    private boolean preemptive_authentication = false;
     private HttpState m_state = null;
     private String m_method = null;
     private String m_target = null;
     private Map m_headers = null;
     private DocumentFragment m_requestdocument = null;
+    private String username = "";
+    private String password = "";
 
     public RESTTransformer() {
         super.defaultNamespaceURI = NS_URI;
     }
 
     @Override
-    public void configure(Configuration configuration) throws 
+    public void configure(Configuration configuration) throws
             ConfigurationException {
         super.configure(configuration);
 
         preemptive_authentication = false;
         m_state = new HttpState();
-        
+
         final Configuration authentication = configuration.getChild("authentication");
         if (null != authentication) {
             if (getLogger().isDebugEnabled()) {
                 getLogger().debug("Setting authentication details.");
             }
-            if (null != authentication.getChild("username")) {
-                m_state.setCredentials(authScope, new UsernamePasswordCredentials(
-                        authentication.getChild("username").getValue(""),
-                        authentication.getChild("password").getValue("")));
+            if (null != authentication.getChild(SETUP_USERNAME_ATTR)) {
+                username = authentication.getChild(SETUP_USERNAME_ATTR).getValue("");
+                password = authentication.getChild(SETUP_PASSWORD_ATTR).getValue("");
+                m_state.setCredentials(authScope, new UsernamePasswordCredentials(username, password));
             }
-            if (null != authentication.getChild("preemptive-authentication")) {
-                preemptive_authentication = Boolean.parseBoolean(authentication.getChild("preemptive-authentication").getValue("false"));
+            if (null != authentication.getChild(SETUP_PREEMPTIVEAUTHENTICATION_ATTR)) {
+                preemptive_authentication = Boolean.parseBoolean(authentication.getChild(SETUP_PREEMPTIVEAUTHENTICATION_ATTR).getValue("false"));
                 if (getLogger().isDebugEnabled()) {
-                    getLogger().debug("Setting preemptive-authentication from configuration: "+preemptive_authentication+".");
+                    getLogger().debug("Setting preemptive-authentication from configuration: " + preemptive_authentication + ".");
                 }
             }
         }
@@ -245,17 +251,16 @@ public class RESTTransformer extends AbstractSAXTransformer
             throws ProcessingException, SAXException, IOException {
         super.setup(resolver, objectModel, src, par);
 
-
-        if (null != par.getParameter("preemptive-authentication", null)) {
-            preemptive_authentication = Boolean.parseBoolean(par.getParameter("preemptive-authentication", "false"));
+        if (null != par.getParameter(SETUP_PREEMPTIVEAUTHENTICATION_ATTR, null)) {
+            preemptive_authentication = Boolean.parseBoolean(par.getParameter(SETUP_PREEMPTIVEAUTHENTICATION_ATTR, "false"));
             if (getLogger().isDebugEnabled()) {
-                getLogger().debug("Setting preemptive-authentication in setup(): "+preemptive_authentication+".");
+                getLogger().debug("Setting preemptive-authentication in setup(): " + preemptive_authentication + ".");
             }
         }
-        if (null != par.getParameter("username", null)) {
-            m_state.setCredentials(authScope, new UsernamePasswordCredentials(
-                    par.getParameter("username", ""),
-                    par.getParameter("password", "")));
+        if (null != par.getParameter(SETUP_USERNAME_ATTR, null)) {
+            username = par.getParameter(SETUP_USERNAME_ATTR, "");
+            password = par.getParameter(SETUP_PASSWORD_ATTR, "");
+            m_state.setCredentials(authScope, new UsernamePasswordCredentials(username, password));
         }
     }
 
@@ -388,7 +393,7 @@ public class RESTTransformer extends AbstractSAXTransformer
     private void executeRequest(HttpMethod method) throws SAXException {
         try {
             if (getLogger().isDebugEnabled()) {
-                getLogger().debug("using preemptive-authentication="+preemptive_authentication+".");
+                getLogger().debug("using preemptive-authentication=" + preemptive_authentication + ".");
             }
             client.getParams().setAuthenticationPreemptive(preemptive_authentication);
             client.executeMethod(method.getHostConfiguration(), method, m_state);
@@ -431,19 +436,28 @@ public class RESTTransformer extends AbstractSAXTransformer
                         mimeType = mimeType.substring(0, pos);
                     }
                 }
-                if (mimeType != null && mimeType.equals("text/xml")) {
-                    super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
-                    IncludeXMLConsumer consumer = new IncludeXMLConsumer(super.contentHandler);
-                    XMLizer xmlizer = null;
-                    try {
-                        xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
-                        xmlizer.toSAX(in, mimeType, m_target, consumer);
-                    } catch (ServiceException ce) {
-                        throw new SAXException("Missing service dependency: " + XMLizer.ROLE, ce);
-                    } finally {
-                        manager.release(xmlizer);
+                if (mimeType != null) {
+                    if (mimeType.equals("text/xml")) {
+                        super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
+                        IncludeXMLConsumer consumer = new IncludeXMLConsumer(super.contentHandler);
+                        XMLizer xmlizer = null;
+                        try {
+                            xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
+                            xmlizer.toSAX(in, mimeType, m_target, consumer);
+                        } catch (ServiceException ce) {
+                            throw new SAXException("Missing service dependency: " + XMLizer.ROLE, ce);
+                        } finally {
+                            manager.release(xmlizer);
+                        }
+                        super.contentHandler.endElement(NS_URI, BODY_TAG, qName(BODY_TAG));
                     }
-                    super.contentHandler.endElement(NS_URI, BODY_TAG, qName(BODY_TAG));
+                    if (mimeType.equals("text/plain")) {
+                        super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
+                        String error = IOUtils.toString(in, "UTF-8");
+                        super.contentHandler.characters(error.toCharArray(), 0, error.length());
+                        super.contentHandler.endElement(NS_URI, BODY_TAG, qName(BODY_TAG));
+                    }
+
                 }
             }
 
@@ -457,4 +471,5 @@ public class RESTTransformer extends AbstractSAXTransformer
             throw new SAXException("Error executing REST request", e);
         }
     }
-} 
+
+}
