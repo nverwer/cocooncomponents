@@ -6,7 +6,7 @@
 
     The default 'jar' target creates a jar file with these components.
     You can use the install targets to install the components.
-    You must have defined the COCOON environment variable, because it is used to find the Cocoon jars.
+    You  must have defined the COCOON environment variable, because it is used to find the Cocoon jars.
     This variable contains the path to the Cocoon build directory, which contains 'webapp'.
   </description>
 
