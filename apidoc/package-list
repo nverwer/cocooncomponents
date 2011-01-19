@@ -1,0 +1,7 @@
+org.apache.cocoon.components.language.markup.xsp
+org.apache.cocoon.components.modules.input
+org.apache.cocoon.generation
+org.apache.cocoon.selection
+org.apache.cocoon.serialization
+org.apache.cocoon.transformation
+org.apache.cocoon.webapps.authentication.acting

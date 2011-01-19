@@ -16,6 +16,7 @@
   <property name="src" location="src"/>
   <property name="lib" location="lib"/>
   <property name="build" location="build"/>
+  <property name="apidoc" location="apidoc"/>
   <property name="jarfile" location="BeValueCocoonComponents.jar"/>
 
   <target name="init">
@@ -53,6 +54,21 @@
     <copy todir="${cocoon.lib}">
       <fileset dir="${lib}"><include name="*.jar"/></fileset>
     </copy>
+  </target>
+  
+  <target name="javadoc" description="Generate the javadoc">
+    <javadoc packagenames="org.apache.cocoon.*"
+             sourcepath="${src}"
+             excludepackagenames="org.apache.cocoon.transformation.alternative"
+             defaultexcludes="yes"
+             destdir="${apidoc}"
+             author="false"
+             version="true"
+             use="true"
+             windowtitle="Cocoon components">
+      <doctitle><![CDATA[<h1>Cocoon components</h1>]]></doctitle>
+      <bottom><![CDATA[<i>http://code.google.com/p/cocooncomponents/</i>]]></bottom>
+    </javadoc>
   </target>
 
   <target name="clean" description="clean up" >
