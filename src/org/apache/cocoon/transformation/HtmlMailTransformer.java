@@ -187,6 +187,7 @@ public class HtmlMailTransformer extends AbstractSAXTransformer {
         contentHandler.startElement(NAMESPACE, "error", namespacePrefix+"error", attrs);
         String errorMessage = e.getMessage();
         contentHandler.characters(errorMessage.toCharArray(), 0, errorMessage.length());
+        e.printStackTrace();
         contentHandler.endElement(NAMESPACE, "error", namespacePrefix+"error");
         getLogger().error("Sending mail to "+toAddress+" failed.", e);
       }
