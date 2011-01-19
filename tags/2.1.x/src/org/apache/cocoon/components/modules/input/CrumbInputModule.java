@@ -19,12 +19,15 @@ public class CrumbInputModule extends AbstractInputModule {
   /**
    * @return the value of the cookie-crumb whose name matches the attribute "cookie/crumb",
    * or <code>null</code> if there is no match.
+   * For example, suppose you call this module "crumb", and you have a cookie called "biscuit"
+   * with the value "base=wheat&topping=sugar". Then in your sitemap, {crumb:biscuit/topping}
+   * will yield the value "sugar".
    */
   public Object getAttribute(String attribute, Configuration modeConf, Map objectModel)
     throws ConfigurationException
   {
       String value = null;
-      String[] name = attribute.split("/", 2);
+      String[] name = attribute.split("/", 2); // Name of the cookie and name of the crumb.
       HttpCookie cookie = (HttpCookie) getCookieMap(objectModel).get(name[0]);
       if (cookie != null) {
         String[] parameters = cookie.getValue().split("&");
