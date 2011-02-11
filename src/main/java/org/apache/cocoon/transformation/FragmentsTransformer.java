@@ -2,6 +2,7 @@ package org.apache.cocoon.transformation;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.util.Hashtable;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -29,6 +30,7 @@ import org.apache.excalibur.source.Source;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.xml.sax.Attributes;
+import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 
 /**
@@ -97,6 +99,7 @@ public class FragmentsTransformer extends AbstractSAXTransformer
     private FragmentsTransformerConsumer fragmentsTransformerConsumer;
     private boolean recording;
     private boolean insideTransformElement;
+    private Hashtable<String, Integer> nsPrefixes;
 
     public FragmentsTransformer() {
         super.defaultNamespaceURI = "";
@@ -144,6 +147,7 @@ public class FragmentsTransformer extends AbstractSAXTransformer
      */
     @Override
     public void startDocument() throws SAXException {
+        nsPrefixes = new Hashtable<String, Integer>();
         consumer.startDocument();
     }
 
@@ -265,6 +269,113 @@ public class FragmentsTransformer extends AbstractSAXTransformer
         }
     }
 
+
+
+  public void comment(char[] arg0, int arg1, int arg2) throws SAXException {
+    if (recording) {
+      super.comment(arg0, arg1, arg2);
+    } else {
+      consumer.comment(arg0, arg1, arg2);
+    }
+  }
+
+  public void ignorableWhitespace(char[] arg0, int arg1, int arg2) throws SAXException {
+    if (recording) {
+      super.ignorableWhitespace(arg0, arg1, arg2);
+    } else {
+      consumer.ignorableWhitespace(arg0, arg1, arg2);
+    }
+  }
+
+  public void processingInstruction(String arg0, String arg1) throws SAXException {
+    if (recording) {
+      super.processingInstruction(arg0, arg1);
+    } else {
+      consumer.processingInstruction(arg0, arg1);
+    }
+  }
+
+  public void setDocumentLocator(Locator arg0) {
+    if (recording) {
+      super.setDocumentLocator(arg0);
+    } else {
+      consumer.setDocumentLocator(arg0);
+    }
+  }
+
+  public void skippedEntity(String arg0) throws SAXException {
+    if (recording) {
+      super.skippedEntity(arg0);
+    } else {
+      consumer.skippedEntity(arg0);
+    }
+  }
+
+  public void startCDATA() throws SAXException {
+    if (recording) {
+      super.startCDATA();
+    } else {
+      consumer.startCDATA();
+    }
+  }
+
+  public void endCDATA() throws SAXException {
+    if (recording) {
+      super.endCDATA();
+    } else {
+      consumer.endCDATA();
+    }
+  }
+
+  public void startDTD(String arg0, String arg1, String arg2)
+      throws SAXException {
+    if (recording) {
+      super.startDTD(arg0, arg1, arg2);
+    } else {
+      consumer.startDTD(arg0, arg1, arg2);
+    }
+  }
+
+  public void endDTD() throws SAXException {
+    if (recording) {
+      super.endDTD();
+    } else {
+      consumer.endDTD();
+    }
+  }
+
+  public void startEntity(String arg0) throws SAXException {
+    if (recording) {
+      super.startEntity(arg0);
+    } else {
+      consumer.startEntity(arg0);
+    }
+  }
+
+  public void endEntity(String arg0) throws SAXException {
+    if (recording) {
+      super.endEntity(arg0);
+    } else {
+      consumer.endEntity(arg0);
+    }
+  }
+
+  public void startPrefixMapping(String prefix, String uri) throws SAXException {
+    if (recording) {
+      super.startPrefixMapping(prefix, uri);
+    } else {
+      fragmentsTransformerConsumer.startPrefixMapping(prefix, uri);
+    }
+  }
+
+  public void endPrefixMapping(String prefix) throws SAXException {
+    if (recording) {
+      super.endPrefixMapping(prefix);
+    } else {
+      fragmentsTransformerConsumer.endPrefixMapping(prefix);
+    }
+  }
+
     /**
      * Consume XML from the TraxTransformer, and pass it on to the consumer
      * of the FragmentsTransformer, except begin/endDocument.
@@ -280,5 +391,26 @@ public class FragmentsTransformer extends AbstractSAXTransformer
         public void endDocument() throws SAXException {
             // Do not pass on when generated from a fragment transformation.
         }
+
+
+    public void startPrefixMapping(String prefix, String uri) throws SAXException {
+      if (!nsPrefixes.containsKey(prefix)) {
+        nsPrefixes.put(prefix, 1);
+        super.startPrefixMapping(prefix, uri);
+      } else {
+        nsPrefixes.put(prefix, nsPrefixes.get(prefix)+1);
+      }
+    }
+
+    public void endPrefixMapping(String prefix) throws SAXException {
+      if (!nsPrefixes.containsKey(prefix)) {
+        return; // This is wrong, but it happens sometimes.
+      }
+      nsPrefixes.put(prefix, nsPrefixes.get(prefix)-1);
+      if (nsPrefixes.get(prefix) == 0) {
+        super.endPrefixMapping(prefix);
+        nsPrefixes.remove(prefix);
+      }
+    }
     }
 }
