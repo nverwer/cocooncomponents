@@ -16,10 +16,12 @@
  */
 package org.apache.cocoon.serialization;
 
+import java.io.ByteArrayOutputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Enumeration;
+import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -107,6 +109,9 @@ public class ZipArchiveSerializer extends AbstractSerializer
     /** The resolver to get sources */
     protected SourceResolver resolver;
 
+    /** Temporary buffer for stored (uncompressed) entries */
+    protected ByteArrayOutputStream baos;
+    
     /** Temporary byte buffer to read source data */
     protected byte[] buffer;
 
@@ -123,6 +128,9 @@ public class ZipArchiveSerializer extends AbstractSerializer
      * Store exception
      */
     private SAXException exception;
+    
+    /* Current zip-entry. */
+    ZipEntry entry;
 
 
     /**
@@ -207,7 +215,7 @@ public class ZipArchiveSerializer extends AbstractSerializer
                 if (namespaceURI.equals(ZIP_NAMESPACE) && localName.equals("entry")) {
                     this.nsSupport.pushContext();
                     // Get the source
-                    addEntry(atts);
+                    startAddEntry(atts);
                 } else {
                     throw this.exception =
                         new SAXException("Expecting 'entry' element (got '" + localName + "')");
@@ -246,7 +254,9 @@ public class ZipArchiveSerializer extends AbstractSerializer
      * Add an entry in the archive.
      * @param atts the attributes that describe the entry
      */
-    protected void addEntry(Attributes atts) throws SAXException {
+    protected void startAddEntry(Attributes atts) throws SAXException {
+        // Buffer lazily allocated to 8kB, if it didn't already exist.
+        if (this.buffer == null) this.buffer = new byte[8192];
         String name = atts.getValue("name");
         if (name == null) {
             throw this.exception =
@@ -267,6 +277,9 @@ public class ZipArchiveSerializer extends AbstractSerializer
             throw this.exception =
                 new SAXException("Cannot specify both 'src' and 'serializer' on a Zip entry '" + name + "'");
         }
+        
+        // Create a new Zip entry.
+        entry = new ZipEntry(name);
 
         Source source = null;
         try {
@@ -275,60 +288,73 @@ public class ZipArchiveSerializer extends AbstractSerializer
                 source = resolver.resolveURI(src);
                 InputStream sourceInput = source.getInputStream();
 
-                // Create a new Zip entry with file modification time.
-                ZipEntry entry = new ZipEntry(name);
+                // Set file modification time.
                 long lastModified = source.getLastModified();
                 if (lastModified != 0)
                     entry.setTime(lastModified);
-                // If specified, set method and comment.
-                if (method != null) {
-                  if (method.toLowerCase().equals("stored"))
-                    entry.setMethod(ZipEntry.STORED);
-                  else
-                    entry.setMethod(ZipEntry.DEFLATED);
-                }
+                // If specified, set comment.
                 if (comment != null)
-                  entry.setComment(comment);
-                
-                this.zipOutput.putNextEntry(entry);
-                
-                // Buffer lazily allocated
-                if (this.buffer == null)
-                    this.buffer = new byte[8192];
-
-                // Copy the source to the zip
-                int len;
-                while ((len = sourceInput.read(this.buffer)) > 0) {
-                    this.zipOutput.write(this.buffer, 0, len);
+                    entry.setComment(comment);
+                // Specify the method if STORED.
+                if (method != null && method.toLowerCase().equals("stored")) {
+                    entry.setMethod(ZipEntry.STORED);
+                    // For STORED entries, we have to determine size and checksum, by buffering the content.
+                    baos = new ByteArrayOutputStream();
+                    // Copy the source to the baos
+                    int len;
+                    while ((len = sourceInput.read(this.buffer)) > 0) {
+                        baos.write(this.buffer, 0, len);
+                    }
+                } else {
+                    this.zipOutput.putNextEntry(entry);
+                    // Copy the source to the zip
+                    int len;
+                    while ((len = sourceInput.read(this.buffer)) > 0) {
+                        this.zipOutput.write(this.buffer, 0, len);
+                    }
+                    // Close the entry
+                    this.zipOutput.closeEntry();
                 }
-
-                // and close the entry
-                this.zipOutput.closeEntry();
+                endAddEntry(); // We are not going to serialize content.
                 // close input stream (to avoid "too many open files" problem)
                 sourceInput.close();
             } else {
-                // Create a new Zip entry with current time.
-                ZipEntry entry = new ZipEntry(name);
-                this.zipOutput.putNextEntry(entry);
+                // Content is within entry element.
+                // Zip entry already has current time as modification time.
+                // If specified, set comment.
+                if (comment != null)
+                    entry.setComment(comment);
+                // Specify the method if STORED.
+                if (method != null && method.toLowerCase().equals("stored")) {
+                    entry.setMethod(ZipEntry.STORED);
+                    // For STORED entries, we have to determine size and checksum, by buffering the content.
+                    baos = new ByteArrayOutputStream();
+                } else {
+                    this.zipOutput.putNextEntry(entry);
+                    // Now ready to write output to the zip-outputstream
+                }
 
                 // Serialize content
                 if (this.selector == null) {
                     this.selector =
                         (ServiceSelector) this.manager.lookup(Serializer.ROLE + "Selector");
                 }
-
                 // Get the serializer
                 this.serializer = (Serializer) this.selector.select(serializerType);
 
-                // Direct its output to the zip file, filtering calls to close()
+                // For STORED entries, direct output to the baos buffer.
+                // Otherwise, direct output to the zip file, filtering calls to close()
                 // (we don't want the archive to be closed by the serializer)
-                this.serializer.setOutputStream(new FilterOutputStream(this.zipOutput) {
-                    public void close() { /* nothing */ }
-                });
+                if (entry.getMethod() == ZipEntry.STORED) {
+                    this.serializer.setOutputStream(baos);
+                } else {
+                    this.serializer.setOutputStream(new FilterOutputStream(this.zipOutput) {
+                        public void close() { /* nothing */ }
+                    });
+                }
 
                 // Set it as the current XMLConsumer
                 setConsumer(serializer);
-
                 // start its document
                 this.serializer.startDocument();
 
@@ -344,6 +370,40 @@ public class ZipArchiveSerializer extends AbstractSerializer
             throw this.exception = new SAXException(e);
         } finally {
             this.resolver.release( source );
+        }
+    }
+    
+    /**
+     * Complete adding an entry in the archive.
+     * @throws SAXException 
+     */
+    protected void endAddEntry() throws SAXException {
+        if (entry.getMethod() == ZipEntry.STORED) {
+            try {
+                // Determine length and checksum
+                byte[] bytes =  baos.toByteArray();
+                entry.setSize(bytes.length);
+                CRC32 crc = new CRC32();
+                crc.reset();
+                crc.update(bytes);
+                entry.setCrc(crc.getValue());
+                // Put the entry in the zip-output
+                this.zipOutput.putNextEntry(entry);
+                // Copy the content
+                this.zipOutput.write(bytes);
+                // Close the entry
+                this.zipOutput.closeEntry();
+            } catch (IOException e) {
+                throw this.exception = new SAXException(e);
+            }
+            baos = null;
+            entry = null;
+        }
+        // Close the entry.
+        try {
+            this.zipOutput.closeEntry();
+        } catch (IOException ioe) {
+            throw this.exception = new SAXException(ioe);
         }
     }
 
@@ -373,12 +433,8 @@ public class ZipArchiveSerializer extends AbstractSerializer
                 }
 
                 super.endDocument();
-
-                try {
-                    this.zipOutput.closeEntry();
-                } catch (IOException ioe) {
-                    throw this.exception = new SAXException(ioe);
-                }
+                
+                endAddEntry();
 
                 super.setConsumer(null);
                 this.selector.release(this.serializer);
