@@ -23,7 +23,7 @@ import org.xml.sax.SAXException;
  * in <code>map:sitemap/map:components/map:transformers</code>:
  * 
  * <pre>
- * &lt;map:transformer name="cookie"; src="org.apache.cocoon.transformation.CookieTransformer"/&gt;
+ * &lt;map:transformer name="cookie" src="org.apache.cocoon.transformation.CookieTransformer"/&gt;
  * </pre>
  * 
  * Example use in sitemap:
@@ -32,9 +32,9 @@ import org.xml.sax.SAXException;
  * &lt;map:transformer type="cookie"/&gt; 
  * </pre>
  * 
- * The CookieTransformer recognizes elements in the "http://apache.org/cocoon/transformation/cookie" namespace/.
+ * The CookieTransformer recognizes elements in the "http://apache.org/cocoon/transformation/cookie" namespace.
  * 
- * <b>To set a cookie:</b>
+ * <p><b>To set a cookie:</b></p>
  * 
  * <pre>
  * &lt;cookie:setCookie name="cookie-name" value="cookie-value" maxAge="max" domain="cookie.com" path="/" xmlns:cookie="http://apache.org/cocoon/transformation/cookie"&gt;
@@ -43,7 +43,7 @@ import org.xml.sax.SAXException;
  * The maxAge="max" specifies the largest possible maximum age of a cookie,
  * "-1" indicates that the cookie lasts until the browser quits, "0" indicates that a cookie should be discarded.
  * 
- * <b>To get a specific cookie:</b>
+ * <p><b>To get a specific cookie:</b></p>
  * 
  * <pre>
  * &lt;cookie:getCookie name="cookie-name" xmlns:cookie="http://apache.org/cocoon/transformation/cookie"/&gt;
@@ -53,12 +53,12 @@ import org.xml.sax.SAXException;
  * &lt;cookie:cookie name="cookie-name" value="cookie-value"/&gt;
  * </pre>
  * 
- * <b>Cookies can contain multiple values in <i>crumbs</i>:</b>
+ * <p><b>Cookies can contain multiple values in <i>crumbs</i>:</b></p>
  * 
  * <pre>
  * &lt;cookie:setCrumbs name="cookie-name" maxAge="max" path="/" xmlns:cookie="http://apache.org/cocoon/transformation/cookie"&gt;
- *   &lt;crumb name="foo" value="bar"/&gt;
- *   &lt;crumb name="greet" value="Hello World"/&gt;
+ *   &lt;cookie:crumb name="foo" value="bar"/&gt;
+ *   &lt;cookie:crumb name="greet" value="Hello World"/&gt;
  * &lt;/cookie:setCrumbs&gt;
  * </pre>
  * encodes 'crumbs' into a URI/query-string encoded cookie.
@@ -71,12 +71,12 @@ import org.xml.sax.SAXException;
  * For example, if the cookie value is "foo=bar&greet=Hello%20World", this returns:
  * <pre>
  *   &lt;cookie:cookie name="cookie-name"&gt;
- *     &lt;crumb name="foo" value="bar"/&gt;
- *     &lt;crumb name="greet" value="Hello World"/&gt;
+ *     &lt;cookie:crumb name="foo" value="bar"/&gt;
+ *     &lt;cookie:crumb name="greet" value="Hello World"/&gt;
  *   &lt;/cookie:cookie&gt;
  * </pre>
  * 
- * <i>Attributes:</i>
+ * <p><b>Attributes:</b></p>
  * <table>
  * <tr>
  *   <th>attribute name</th><th>description</th><th>type</th><th>default-value</th>
@@ -163,8 +163,11 @@ public class CookieTransformer extends AbstractSAXTransformer {
             startCookieElement(nsPrefix, cookie.getName(), null, Integer.toString(cookie.getMaxAge()));
             String[] parameters = cookie.getValue().split("&");
             for (String parameter: parameters) {
-              String[] keyValue = parameter.split("=", 2);
-              sendCrumbElement(nsPrefix, URLDecoder.decode(keyValue[0], "UTF-8"), URLDecoder.decode(keyValue[1], "UTF-8"));
+              if (! parameter.equals("")) {
+                String[] keyValue = parameter.split("=", 2);
+                if (keyValue.length == 2)
+                  sendCrumbElement(nsPrefix, URLDecoder.decode(keyValue[0], "UTF-8"), URLDecoder.decode(keyValue[1], "UTF-8"));
+              }
             }
             endCookieElement(nsPrefix);
             break;
