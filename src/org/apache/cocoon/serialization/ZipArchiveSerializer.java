@@ -70,6 +70,9 @@ import org.xml.sax.helpers.NamespaceSupport;
  * 
  * The method attribute on an entry can be "deflated" (default, compressed) or "stored" (no compression).
  * The comment attribute on an entry is a string, which is added as a comment to the entry.
+ * 
+ * The optional debug attribute on &lt;zip:archive&gt;, when set to "INFO" or "WARN" (case-insensitive),
+ * causes the transformer to log the zip actions for each entry, with the given log-level.
  *
  * @author <a href="http://www.apache.org/~sylvain">Sylvain Wallez</a>
  * @version $Id: ZipArchiveSerializer.java 437692 2006-08-28 13:09:39Z anathaniel $
@@ -131,6 +134,9 @@ public class ZipArchiveSerializer extends AbstractSerializer
     
     /* Current zip-entry. */
     ZipEntry entry;
+    
+    /* Debug attribute */
+    private String debug;
 
 
     /**
@@ -204,6 +210,7 @@ public class ZipArchiveSerializer extends AbstractSerializer
                 if (namespaceURI.equals(ZIP_NAMESPACE) && localName.equals("archive")) {
                     this.nsSupport.pushContext();
                     this.state = IN_ZIP_STATE;
+                    debug = atts.getValue("debug");
                 } else {
                     throw this.exception =
                         new SAXException("Expecting 'archive' root element (got '" + localName + "')");
@@ -267,6 +274,17 @@ public class ZipArchiveSerializer extends AbstractSerializer
         String serializerType = atts.getValue("serializer");
         String method = atts.getValue("method");
         String comment = atts.getValue("comment");
+        
+        if (debug != null) {
+            String debugMessage = "Adding "+method+" zip-entry ["+name+"] from ["+src+"].";
+            if (comment != null)
+                debugMessage += "\n\t\"" + comment + "\"";
+            if (debug.equalsIgnoreCase("WARN")) {
+                this.getLogger().warn(debugMessage);
+            } else if (debug.equalsIgnoreCase("INFO")) {
+                this.getLogger().info(debugMessage);
+            }
+        }
 
         if (src == null && serializerType == null) {
             throw this.exception =
