@@ -437,7 +437,7 @@ public class RESTTransformer extends AbstractSAXTransformer
                     }
                 }
                 if (mimeType != null) {
-                    if (mimeType.equals("text/xml")) {
+                    if (mimeType.equals("text/xml") || mimeType.equals("application/xml")) {
                         super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
                         IncludeXMLConsumer consumer = new IncludeXMLConsumer(super.contentHandler);
                         XMLizer xmlizer = null;
