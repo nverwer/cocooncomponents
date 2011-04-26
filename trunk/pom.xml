@@ -7,7 +7,7 @@
     <name>cocooncomponents</name>
     <groupId>com.google.code</groupId>
     <artifactId>cocooncomponents</artifactId>
-    <version>1.0.7</version>
+    <version>1.0.8</version>
     <dependencies>
         <dependency>
             <groupId>org.apache.cocoon</groupId>

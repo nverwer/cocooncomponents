@@ -80,7 +80,6 @@ public class FragmentsTransformer extends AbstractSAXTransformer
     public void dispose() {
         super.dispose();
     }
-
     private static final String NS_URI = "http://org.apache.cocoon.transformation/fragments/1.0";
     private static final String NS_PREFIX = "fragments";
     private static final String TRANSFORM_TAG = "transform";
@@ -119,6 +118,8 @@ public class FragmentsTransformer extends AbstractSAXTransformer
         this.resolver = resolver;
         recording = false;
         insideTransformElement = false;
+        this.ignoreEmptyCharacters = false;
+        this.ignoreWhitespaces = false;
     }
 
     /*
@@ -248,8 +249,7 @@ public class FragmentsTransformer extends AbstractSAXTransformer
         }
         if (namespaceURI.equals(NS_URI) && lName.equals(TRANSFORM_TAG)) {
             insideTransformElement = false;
-        }
-        else {
+        } else {
             if (!recording) {
                 consumer.endElement(namespaceURI, lName, qName);
             } else {
@@ -269,112 +269,110 @@ public class FragmentsTransformer extends AbstractSAXTransformer
         }
     }
 
-
-
-  public void comment(char[] arg0, int arg1, int arg2) throws SAXException {
-    if (recording) {
-      super.comment(arg0, arg1, arg2);
-    } else {
-      consumer.comment(arg0, arg1, arg2);
+    public void comment(char[] arg0, int arg1, int arg2) throws SAXException {
+        if (recording) {
+            super.comment(arg0, arg1, arg2);
+        } else {
+            consumer.comment(arg0, arg1, arg2);
+        }
     }
-  }
 
-  public void ignorableWhitespace(char[] arg0, int arg1, int arg2) throws SAXException {
-    if (recording) {
-      super.ignorableWhitespace(arg0, arg1, arg2);
-    } else {
-      consumer.ignorableWhitespace(arg0, arg1, arg2);
+    public void ignorableWhitespace(char[] arg0, int arg1, int arg2) throws SAXException {
+        if (recording) {
+            super.ignorableWhitespace(arg0, arg1, arg2);
+        } else {
+            consumer.ignorableWhitespace(arg0, arg1, arg2);
+        }
     }
-  }
 
-  public void processingInstruction(String arg0, String arg1) throws SAXException {
-    if (recording) {
-      super.processingInstruction(arg0, arg1);
-    } else {
-      consumer.processingInstruction(arg0, arg1);
+    public void processingInstruction(String arg0, String arg1) throws SAXException {
+        if (recording) {
+            super.processingInstruction(arg0, arg1);
+        } else {
+            consumer.processingInstruction(arg0, arg1);
+        }
     }
-  }
 
-  public void setDocumentLocator(Locator arg0) {
-    if (recording) {
-      super.setDocumentLocator(arg0);
-    } else {
-      consumer.setDocumentLocator(arg0);
+    public void setDocumentLocator(Locator arg0) {
+        if (recording) {
+            super.setDocumentLocator(arg0);
+        } else {
+            consumer.setDocumentLocator(arg0);
+        }
     }
-  }
 
-  public void skippedEntity(String arg0) throws SAXException {
-    if (recording) {
-      super.skippedEntity(arg0);
-    } else {
-      consumer.skippedEntity(arg0);
+    public void skippedEntity(String arg0) throws SAXException {
+        if (recording) {
+            super.skippedEntity(arg0);
+        } else {
+            consumer.skippedEntity(arg0);
+        }
     }
-  }
 
-  public void startCDATA() throws SAXException {
-    if (recording) {
-      super.startCDATA();
-    } else {
-      consumer.startCDATA();
+    public void startCDATA() throws SAXException {
+        if (recording) {
+            super.startCDATA();
+        } else {
+            consumer.startCDATA();
+        }
     }
-  }
 
-  public void endCDATA() throws SAXException {
-    if (recording) {
-      super.endCDATA();
-    } else {
-      consumer.endCDATA();
+    public void endCDATA() throws SAXException {
+        if (recording) {
+            super.endCDATA();
+        } else {
+            consumer.endCDATA();
+        }
     }
-  }
 
-  public void startDTD(String arg0, String arg1, String arg2)
-      throws SAXException {
-    if (recording) {
-      super.startDTD(arg0, arg1, arg2);
-    } else {
-      consumer.startDTD(arg0, arg1, arg2);
+    public void startDTD(String arg0, String arg1, String arg2)
+            throws SAXException {
+        if (recording) {
+            super.startDTD(arg0, arg1, arg2);
+        } else {
+            consumer.startDTD(arg0, arg1, arg2);
+        }
     }
-  }
 
-  public void endDTD() throws SAXException {
-    if (recording) {
-      super.endDTD();
-    } else {
-      consumer.endDTD();
+    public void endDTD() throws SAXException {
+        if (recording) {
+            super.endDTD();
+        } else {
+            consumer.endDTD();
+        }
     }
-  }
 
-  public void startEntity(String arg0) throws SAXException {
-    if (recording) {
-      super.startEntity(arg0);
-    } else {
-      consumer.startEntity(arg0);
+    public void startEntity(String arg0) throws SAXException {
+        if (recording) {
+            super.startEntity(arg0);
+        } else {
+            consumer.startEntity(arg0);
+        }
     }
-  }
 
-  public void endEntity(String arg0) throws SAXException {
-    if (recording) {
-      super.endEntity(arg0);
-    } else {
-      consumer.endEntity(arg0);
+    public void endEntity(String arg0) throws SAXException {
+        if (recording) {
+            super.endEntity(arg0);
+        } else {
+            consumer.endEntity(arg0);
+        }
     }
-  }
 
-  public void startPrefixMapping(String prefix, String uri) throws SAXException {
-    if (recording) {
-      super.startPrefixMapping(prefix, uri);
-    } else {
-      fragmentsTransformerConsumer.startPrefixMapping(prefix, uri);
+    public void startPrefixMapping(String prefix, String uri) throws SAXException {
+        if (recording) {
+            super.startPrefixMapping(prefix, uri);
+        } else {
+            fragmentsTransformerConsumer.startPrefixMapping(prefix, uri);
+        }
     }
-  }
 
-  public void endPrefixMapping(String prefix) throws SAXException {
-    if (recording) {
-      super.endPrefixMapping(prefix);
-    } else {
-      fragmentsTransformerConsumer.endPrefixMapping(prefix);
+    public void endPrefixMapping(String prefix) throws SAXException {
+        if (recording) {
+            super.endPrefixMapping(prefix);
+        } else {
+            fragmentsTransformerConsumer.endPrefixMapping(prefix);
+        }
     }
-  }
 
     /**
      * Consume XML from the TraxTransformer, and pass it on to the consumer
@@ -392,25 +390,24 @@ public class FragmentsTransformer extends AbstractSAXTransformer
             // Do not pass on when generated from a fragment transformation.
         }
 
+        public void startPrefixMapping(String prefix, String uri) throws SAXException {
+            if (!nsPrefixes.containsKey(prefix)) {
+                nsPrefixes.put(prefix, 1);
+                super.startPrefixMapping(prefix, uri);
+            } else {
+                nsPrefixes.put(prefix, nsPrefixes.get(prefix) + 1);
+            }
+        }
 
-    public void startPrefixMapping(String prefix, String uri) throws SAXException {
-      if (!nsPrefixes.containsKey(prefix)) {
-        nsPrefixes.put(prefix, 1);
-        super.startPrefixMapping(prefix, uri);
-      } else {
-        nsPrefixes.put(prefix, nsPrefixes.get(prefix)+1);
-      }
-    }
-
-    public void endPrefixMapping(String prefix) throws SAXException {
-      if (!nsPrefixes.containsKey(prefix)) {
-        return; // This is wrong, but it happens sometimes.
-      }
-      nsPrefixes.put(prefix, nsPrefixes.get(prefix)-1);
-      if (nsPrefixes.get(prefix) == 0) {
-        super.endPrefixMapping(prefix);
-        nsPrefixes.remove(prefix);
-      }
-    }
+        public void endPrefixMapping(String prefix) throws SAXException {
+            if (!nsPrefixes.containsKey(prefix)) {
+                return; // This is wrong, but it happens sometimes.
+            }
+            nsPrefixes.put(prefix, nsPrefixes.get(prefix) - 1);
+            if (nsPrefixes.get(prefix) == 0) {
+                super.endPrefixMapping(prefix);
+                nsPrefixes.remove(prefix);
+            }
+        }
     }
 }
