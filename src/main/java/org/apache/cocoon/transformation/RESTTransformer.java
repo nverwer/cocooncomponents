@@ -436,8 +436,15 @@ public class RESTTransformer extends AbstractSAXTransformer
                         mimeType = mimeType.substring(0, pos);
                     }
                 }
-                if (mimeType != null) {
-                    if (mimeType.equals("text/xml") || mimeType.equals("application/xml")) {
+                if (mimeType != null) {                    
+                    if (mimeType.equals("text/plain")) {
+                        super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
+                        String error = IOUtils.toString(in, "UTF-8");
+                        super.contentHandler.characters(error.toCharArray(), 0, error.length());
+                        super.contentHandler.endElement(NS_URI, BODY_TAG, qName(BODY_TAG));
+                    }
+                           // Treat everything else as XML
+                    else { //if (mimeType.equals("text/xml") || mimeType.equals("application/xml")) {
                         super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
                         IncludeXMLConsumer consumer = new IncludeXMLConsumer(super.contentHandler);
                         XMLizer xmlizer = null;
@@ -451,13 +458,6 @@ public class RESTTransformer extends AbstractSAXTransformer
                         }
                         super.contentHandler.endElement(NS_URI, BODY_TAG, qName(BODY_TAG));
                     }
-                    if (mimeType.equals("text/plain")) {
-                        super.contentHandler.startElement(NS_URI, BODY_TAG, qName(BODY_TAG), atts);
-                        String error = IOUtils.toString(in, "UTF-8");
-                        super.contentHandler.characters(error.toCharArray(), 0, error.length());
-                        super.contentHandler.endElement(NS_URI, BODY_TAG, qName(BODY_TAG));
-                    }
-
                 }
             }
 
