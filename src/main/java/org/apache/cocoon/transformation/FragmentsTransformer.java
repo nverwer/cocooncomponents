@@ -34,15 +34,15 @@ import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 
 /**
- * <p>This transformer works with Cocoon 2.2. Compatibility with
+ * <p>This abstract transformer works with Cocoon 2.2. Compatibility with
  * Cocoon 2.1 has not been checked, YMMV.</p>
- * <p>This transformer processes <code>fragmentName</code> elements in the
- * <code>http://org.apache.cocoon.transformation/fragments/1.0</code> namespace. It uses the
- * <code>fragmentName:transform</code> element to transform child elements
- * with the stylesheet that is loaded from it's <code>stylesheet-uri</code>
- * attribute that obviouslycontains the URI for the stylesheet to use.
- * The <code>fragmentName</code> and the <code>fragmentName-namespace</code> attributes
- * specify which elements must be transformed.
+ * <p>This transformer processes <code>transform</code> elements in the
+ * <code>http://org.apache.cocoon.transformation/fragments/1.0</code> namespace.
+ * These <code>fragments:transform</code> elements have
+ * <code>fragment-name</code> and <code>fragment-namespace</code> attributes
+ * to determinse which child elements will be processed 
+ * with the stylesheet that is loaded from the 
+ * <code>stylesheet-uri</code> attribute.
  *
  * The transformer does not do caching.
  * </p>
@@ -138,6 +138,7 @@ public class FragmentsTransformer extends AbstractSAXTransformer
      */
     @Override
     public void setConsumer(XMLConsumer consumer) {
+        super.setConsumer(consumer);
         this.consumer = consumer;
         fragmentsTransformerConsumer = new FragmentsTransformerConsumer();
         fragmentsTransformerConsumer.setConsumer(this.consumer);
