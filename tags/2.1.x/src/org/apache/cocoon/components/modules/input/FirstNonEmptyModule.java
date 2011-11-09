@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.apache.avalon.framework.configuration.Configuration;
 import org.apache.avalon.framework.configuration.ConfigurationException;
+import org.apache.avalon.framework.thread.ThreadSafe;
 
 /**
  * Returns the first non-empty value in a list. The list items are separated by '|'.
@@ -14,7 +15,7 @@ import org.apache.avalon.framework.configuration.ConfigurationException;
  * @author NicoVerwer
  *
  */
-public class FirstNonEmptyModule extends AbstractMetaModule {
+public class FirstNonEmptyModule extends AbstractMetaModule implements ThreadSafe {
 
   public Object getAttribute(String name, Configuration modeConf, Map objectModel) 
     throws ConfigurationException

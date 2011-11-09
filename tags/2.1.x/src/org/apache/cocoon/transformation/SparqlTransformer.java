@@ -29,9 +29,7 @@ import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
 import org.apache.cocoon.xml.AttributesImpl;
 import org.apache.cocoon.xml.IncludeXMLConsumer;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpException;
-import org.apache.commons.httpclient.HttpMethod;
+import org.apache.commons.httpclient.*;
 import org.apache.commons.httpclient.methods.*;
 import org.apache.excalibur.source.SourceParameters;
 import org.apache.excalibur.xmlizer.XMLizer;
@@ -176,7 +174,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       httpMethod = new GetMethod(url);
       // Do not use empty query parameter.
       if (requestParameters.getParameter(QUERY_PARAM).trim().equals("")) requestParameters.removeParameter(QUERY_PARAM);
-      httpMethod.setQueryString(requestParameters.getEncodedQueryString());
+      httpMethod.setQueryString(requestParameters.getEncodedQueryString().replace("\"", "%22")); /* Also escape '"' */
     } else if ("POST".equalsIgnoreCase(method)) {
       PostMethod httpPostMethod = new PostMethod(url);
       if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
@@ -224,7 +222,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
           AttributesImpl attrs = new AttributesImpl();
           attrs.addCDATAAttribute("status", ""+responseCode);
           xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error", attrs);
-          String responseBody = httpMethod.getResponseBodyAsString();
+          String responseBody = httpMethod.getStatusText(); //httpMethod.getResponseBodyAsString();
           xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
           xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error");
           return; // Not a nice, but quick and dirty way to end.
