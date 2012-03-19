@@ -5,11 +5,11 @@ import java.util.Map;
 import org.apache.avalon.framework.configuration.Configuration;
 import org.apache.avalon.framework.configuration.ConfigurationException;
 
-/*
- * name: <delimiter><pattern><delimiter><replacement><delimiter><flags><delimiter><text>
- * e.g., /c(.)t/b$1r//cat => bar
- * The delimiter must not occur in pattern and replacement and flags.
- * Flags are not used at this moment.
+/** An input module that matches and replaces a regular expression in its argument.
+ * The attribute is built up as: <delimiter><pattern><delimiter><replacement><delimiter><flags><delimiter><text>
+ * For example, {regexp:/c(.)t/b$1r//cat} results in "bar".
+ * The delimiter must not occur in pattern and replacement and flags, but can be any character.
+ * Flags are not used yet at this moment.
  */
 public class RegExpMatchInputModule extends AbstractInputModule {
 
