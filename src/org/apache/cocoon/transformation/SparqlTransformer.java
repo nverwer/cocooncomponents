@@ -190,7 +190,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
     } else if ("POST".equalsIgnoreCase(method)) {
       PostMethod httpPostMethod = new PostMethod(url);
       if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
-          httpHeaders.get(HTTP_CONTENT_TYPE).equals("application/x-www-form-urlencoded")) {
+          ((String)httpHeaders.get(HTTP_CONTENT_TYPE)).startsWith("application/x-www-form-urlencoded")) {
         // Do not use empty query parameter.
         if (requestParameters.getParameter(parameterName).trim().equals("")) {
           requestParameters.removeParameter(parameterName);
