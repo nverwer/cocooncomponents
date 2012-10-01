@@ -43,7 +43,7 @@ import java.net.URL;
  * @version CVS $Id: SOAPHelper.java 454485 2006-10-09 20:11:47Z joerg $
  * @since July 16, 2001
  */
-public class SOAPHelper {
+public class XSPSOAPHelper {
     XScriptManager xscriptManager;
     URL url;
     String action = "";
@@ -51,7 +51,7 @@ public class SOAPHelper {
     String authorization = "";
     int timeoutSeconds;
 
-    public SOAPHelper(ComponentManager manager, String urlContext, String url,
+    public XSPSOAPHelper(ComponentManager manager, String urlContext, String url,
                       String action, String authorization, XScriptObject xscriptObject)
             throws MalformedURLException, ComponentException
     {
@@ -126,7 +126,7 @@ public class SOAPHelper {
             }
 
             method.setRequestHeader(
-                    new Header("Content-type", "text/xml; charset=\"utf-8\""));
+                    new Header("Content-type", "text/xml; charset=utf-8"));
             method.setRequestHeader(new Header("SOAPAction", this.action));
             method.setRequestBody(request);
 
