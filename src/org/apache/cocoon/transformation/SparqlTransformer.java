@@ -175,13 +175,13 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
     HttpMethod httpMethod = null;
+    // Do not use empty query parameter.
+    if (requestParameters.getParameter(parameterName).trim().equals("")) {
+      requestParameters.removeParameter(parameterName);
+    }
     // Instantiate different HTTP methods.
     if ("GET".equalsIgnoreCase(method)) {
       httpMethod = new GetMethod(url);
-      // Do not use empty query parameter.
-      if (requestParameters.getParameter(parameterName).trim().equals("")) {
-        requestParameters.removeParameter(parameterName);
-      }
       if (requestParameters.getEncodedQueryString() != null) {
         httpMethod.setQueryString(requestParameters.getEncodedQueryString().replace("\"", "%22")); /* Also escape '"' */
       } else {
@@ -191,17 +191,22 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       PostMethod httpPostMethod = new PostMethod(url);
       if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
           ((String)httpHeaders.get(HTTP_CONTENT_TYPE)).startsWith("application/x-www-form-urlencoded")) {
-        // Do not use empty query parameter.
-        if (requestParameters.getParameter(parameterName).trim().equals("")) {
-          requestParameters.removeParameter(parameterName);
-        }
+        // Encode parameters in POST body.
         Iterator parNames = requestParameters.getParameterNames();
         while (parNames.hasNext()) {
           String parName = (String) parNames.next();
           httpPostMethod.addParameter(parName, requestParameters.getParameter(parName));
         }
       } else {
+        // Use query parameter as POST body
         httpPostMethod.setRequestBody(requestParameters.getParameter(parameterName));
+        // Add other parameters to query string
+        requestParameters.removeParameter(parameterName);
+        if (requestParameters.getEncodedQueryString() != null) {
+          httpMethod.setQueryString(requestParameters.getEncodedQueryString().replace("\"", "%22")); /* Also escape '"' */
+        } else {
+          httpMethod.setQueryString("");
+        }
       }
       httpMethod = httpPostMethod;
     } else if ("PUT".equalsIgnoreCase(method)) {
@@ -212,10 +217,6 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       httpMethod = httpPutMethod;
     } else if ("DELETE".equalsIgnoreCase(method)) {
       httpMethod = new DeleteMethod(url);
-      // Do not use empty query parameter.
-      if (requestParameters.getParameter(parameterName).trim().equals("")) {
-        requestParameters.removeParameter(parameterName);
-      }
       httpMethod.setQueryString(requestParameters.getEncodedQueryString());
     } else {
       throw new ProcessingException("Unsupported method: "+method);
