@@ -203,9 +203,9 @@ public class SparqlTransformer extends AbstractSAXTransformer {
         // Add other parameters to query string
         requestParameters.removeParameter(parameterName);
         if (requestParameters.getEncodedQueryString() != null) {
-          httpMethod.setQueryString(requestParameters.getEncodedQueryString().replace("\"", "%22")); /* Also escape '"' */
+          httpPostMethod.setQueryString(requestParameters.getEncodedQueryString().replace("\"", "%22")); /* Also escape '"' */
         } else {
-          httpMethod.setQueryString("");
+          httpPostMethod.setQueryString("");
         }
       }
       httpMethod = httpPostMethod;
