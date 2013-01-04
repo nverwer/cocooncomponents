@@ -138,7 +138,13 @@ public class XSPSOAPHelper {
 
             method.execute(new HttpState(), conn);
 
-            String ret = method.getResponseBodyAsString();
+            String contentType = method.getResponseHeader("Content-type").toString();
+            // Check if charset given, if not, use "UTF-8" (cannot just use
+            // getResponseCharSet() as it fills in "ISO-8859-1" if
+            // the charset is not specified)
+            String charset = contentType.indexOf("charset=") == -1 ? "UTF-8" : method.getResponseCharSet();
+            String ret = new String(method.getResponseBody(), charset);
+        
             return new XScriptObjectInlineXML(this.xscriptManager, ret);
         } catch (ProcessingException ex) {
             throw ex;
