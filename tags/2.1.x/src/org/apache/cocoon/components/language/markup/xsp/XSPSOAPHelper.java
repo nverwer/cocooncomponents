@@ -149,17 +149,13 @@ public class XSPSOAPHelper {
             method.execute(new HttpState(), conn);
 
             String contentType = method.getResponseHeader("Content-type").toString();
-            // Check if charset given, if not, use "UTF-8" (cannot just use
-            // getResponseCharSet() as it fills in "ISO-8859-1" if
-            // the charset is not specified)
+            // Check if charset given, if not, use defaultResponseEncoding
+            // (cannot just use getResponseCharSet() as it fills in
+            // "ISO-8859-1" if the charset is not specified)
             String charset = contentType.indexOf("charset=") == -1
                     ? this.defaultResponseEncoding
                     : method.getResponseCharSet();
             String ret = new String(method.getResponseBody(), charset);
-            if (ret.indexOf("BWBR0007211") > -1) {
-                ret = ret;
-                System.out.println("Boe!");
-            }
         
             return new XScriptObjectInlineXML(this.xscriptManager, ret);
         } catch (ProcessingException ex) {
