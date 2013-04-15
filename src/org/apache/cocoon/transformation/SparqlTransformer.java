@@ -48,17 +48,22 @@ import org.xml.sax.SAXException;
  * In this case, the content of the <code>query</code> element is passed as the value of a parameter,
  * which has the name specified by the <code>parameter-name</code> attribute (default is "query").
  * Otherwise, the content of the <code>query</code> element (text or XML) goes into the request body.
- * The optional <code>content</code> attribute indicates if the content of the <code>query</code> element is "text" (default for SPARQL queries), or "xml" (useful if you PUT RDF triples).
- * The optional <code>parse</code> attribute indicates how the response should be parsed. It can be "xml" or "text". Default is "xml". Text will be wrapped in an XML element.
- * The optional <code>showErrors</code> attribute can be "true" (default; generate XML elements for HTTP errors) or false (throw exceptions for HTTP errors).
+ * The optional <code>content</code> attribute indicates if the content of the <code>query</code> element is "text"
+ * (default for SPARQL queries), or "xml" (useful if you PUT RDF triples).
+ * The optional <code>parse</code> attribute indicates how the response should be parsed.
+ * It can be "xml" or "text". Default is "xml". Text will be wrapped in an XML element.
+ * The optional <code>showErrors</code> attribute can be "true" (default; generate XML elements for HTTP errors)
+ * or false (throw exceptions for HTTP errors).
  * Attributes in the "http://www.w3.org/2006/http#" namespace are used as request headers.
  * The header name is the local name of the attribute.
  * Attributes in the "http://apache.org/cocoon/sparql/1.0" namespace are used as request parameters.
  * The parameter name is the local name of the attribute. Note: This does not allow for multivalued parameters.
- * The text content of the <code>query</code> element is passed as the value of the 'query' parameter in GET and POST (www-form-urlencoded data) requests.
- * In PUT requests, it is the request entity (body). Note that this is text, even if you put RDF statements in it, so XML must be escaped.
+ * The text content of the <code>query</code> element is passed as the value of the 'query' parameter in GET and
+ * POST (www-form-urlencoded data) requests.
+ * In PUT requests, it is the request entity (body). Note that this is text, even if you put RDF statements in it,
+ * so XML must be escaped.
  * 
- * Exmple XML input, with content and parse attributes set to their default values:
+ * Example XML input, with content and parse attributes set to their default values:
  * <pre>
  *   <sparql:query
  *     xmlns:sparql="http://apache.org/cocoon/sparql/1.0"

@@ -16,7 +16,10 @@
 package org.apache.cocoon.generation;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.util.Iterator;
 import java.util.Map;
+import java.net.URLEncoder;
 
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
@@ -31,6 +34,60 @@ public class UriGenerator extends FileGenerator {
 
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters par)
     throws ProcessingException, SAXException, IOException {
-    super.setup(resolver, objectModel, NetUtils.parameterize(src, Parameters.toProperties(par)), par);
+    super.setup(resolver, objectModel, parameterize(src, Parameters.toProperties(par)), par);
   }
+  
+  /** Adapted from org.apache.cocoon.util.NetUtils
+   * Encode and add parameters stored in the Map to the uri string.
+   * Map can contain Object values which will be converted to the string,
+   * or Object arrays, which will be treated as multivalue attributes.
+   * 
+   * @param uri The uri to add parameters into
+   * @param parameters The map containing parameters to be added
+   * @return The uri with added parameters
+   */
+  private String parameterize(String uri, Map parameters) {
+      if (parameters.size() == 0) {
+          return uri;
+      }
+      
+      StringBuffer buffer = new StringBuffer(uri);
+      if (uri.indexOf('?') == -1) {
+          buffer.append('?');
+      } else {
+          buffer.append('&');
+      }
+      
+      for (Iterator i = parameters.entrySet().iterator(); i.hasNext();) {
+          Map.Entry entry = (Map.Entry)i.next();
+          if (entry.getValue().getClass().isArray()) {
+              Object[] value = (Object[])entry.getValue();
+              for (int j = 0; j < value.length; j++) {
+                  if (j > 0) {
+                      buffer.append('&');
+                  }
+                  buffer.append(encode(entry.getKey()));
+                  buffer.append('=');
+                  buffer.append(encode(value[j]));
+              }
+          } else {
+              buffer.append(encode(entry.getKey()));
+              buffer.append('=');
+              buffer.append(encode(entry.getValue()));
+          }
+          if (i.hasNext()) {
+              buffer.append('&');
+          }
+      }
+      return buffer.toString();
+  }
+  
+  private String encode(Object text) {
+    try {
+      return URLEncoder.encode(text.toString(), "UTF-8");
+    } catch (UnsupportedEncodingException e) {
+      return text.toString();
+    }
+  }
+
 }
