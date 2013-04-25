@@ -15,6 +15,8 @@ public class NormalizePathInputModule extends AbstractInputModule {
     }
     /* Maybe, a path of the form 'part/../[rest]' is left. */
     name = name.replaceAll("[^.][^/]*/\\.\\./", "");
+    /* Some browsers and servers do not like '//' in a path. */
+    name = name.replaceAll("//", "/");
     return name;
   }
 
