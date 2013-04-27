@@ -17,6 +17,8 @@ public class NormalizePathInputModule extends AbstractInputModule {
     name = name.replaceAll("[^.][^/]*/\\.\\./", "");
     /* Some browsers and servers do not like '//' in a path. */
     name = name.replaceAll("//", "/");
+    /* Remove all slashes at the end. */
+    name = name.replaceAll("/+$", "");
     return name;
   }
 
