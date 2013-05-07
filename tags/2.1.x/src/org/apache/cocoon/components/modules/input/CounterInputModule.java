@@ -14,7 +14,7 @@ import org.apache.regexp.RE;
 
 public class CounterInputModule extends AbstractInputModule implements ThreadSafe {
   
-  private HashMap counters = new HashMap();
+  private static HashMap counters = new HashMap();
   
   /**
    * @return Increment the value of a counter on every call.
@@ -23,7 +23,7 @@ public class CounterInputModule extends AbstractInputModule implements ThreadSaf
    * Then in your sitemap, {counter:my-match-1}
    * will yield the value "1". Subsequent matches will return 1, 2, 3, etc.
    */
-    public Object getAttribute(String attribute, Configuration modeConf, Map objectModel)
+    public synchronized Object getAttribute(String attribute, Configuration modeConf, Map objectModel)
             throws ConfigurationException {
         Integer value = (Integer) this.counters.get(attribute);
         if (null == value) {
@@ -46,7 +46,7 @@ public class CounterInputModule extends AbstractInputModule implements ThreadSaf
      * org.apache.cocoon.components.modules.input.InputModule#getAttributeNames(org.apache.avalon.framework.configuration.Configuration,
      * java.util.Map)
      */
-    public Iterator getAttributeNames(Configuration modeConf, Map objectModel)
+    public synchronized Iterator getAttributeNames(Configuration modeConf, Map objectModel)
             throws ConfigurationException {
 
         return this.counters.entrySet().iterator();
@@ -59,7 +59,7 @@ public class CounterInputModule extends AbstractInputModule implements ThreadSaf
      * org.apache.cocoon.components.modules.input.InputModule#getAttributeValues(java.lang.String,
      * org.apache.avalon.framework.configuration.Configuration, java.util.Map)
      */
-    public Object[] getAttributeValues(String name, Configuration modeConf,
+    public synchronized Object[] getAttributeValues(String name, Configuration modeConf,
             Map objectModel) throws ConfigurationException {
 
         Object[] objects = new Object[1];
