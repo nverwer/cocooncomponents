@@ -31,8 +31,6 @@ public class CounterInputModule extends AbstractInputModule implements ThreadSaf
         } else {
             this.counters.put(attribute, new Integer(value.intValue() + 1));
         }
-        System.out.println("Counter[" + attribute + "]=" + this.counters.get(attribute));
-        getLogger().info("Counter[" + attribute + "]=" + this.counters.get(attribute));
         if (getLogger().isDebugEnabled()) {
             getLogger().debug("Counter[" + attribute + "]=" + this.counters.get(attribute));
         }
