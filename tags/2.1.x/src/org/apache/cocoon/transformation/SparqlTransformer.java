@@ -37,34 +37,46 @@ import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 
 /**
- ** @cocoon.sitemap.component.documentation
+ * This transformer can send queries to a ReST SPARQL endpoint.
+ * It can also be used as a genaral HTTP client.
+ *
  * This transformer triggers for the element <code>query</code> in the namespace "http://apache.org/cocoon/sparql/1.0".
  * These elements must not be nested.
+ * 
  * The mandatory <code>src</code> attribute contains the url of a SPARQL endpoint.
+ * 
  * The optional <code>method</code> attribute contains the HTTP method for the request (default is GET).
+ * 
  * For POST requests, parameters are sent in the body if the attribute <code>http:Content-Type</code> is
  * "application/x-www-form-urlencoded".
  * (Note that the header name "Content-Type" is case sensitive!)
  * In this case, the content of the <code>query</code> element is passed as the value of a parameter,
  * which has the name specified by the <code>parameter-name</code> attribute (default is "query").
+ * 
  * Otherwise, the content of the <code>query</code> element (text or XML) goes into the request body.
+ * 
  * The optional <code>content</code> attribute indicates if the content of the <code>query</code> element is "text"
  * (default for SPARQL queries), or "xml" (useful if you PUT RDF triples).
+ * 
  * The optional <code>parse</code> attribute indicates how the response should be parsed.
  * It can be "xml" or "text". Default is "xml". Text will be wrapped in an XML element.
+ * 
  * The optional <code>showErrors</code> attribute can be "true" (default; generate XML elements for HTTP errors)
  * or false (throw exceptions for HTTP errors).
+ * 
  * Attributes in the "http://www.w3.org/2006/http#" namespace are used as request headers.
  * The header name is the local name of the attribute.
+ * 
  * Attributes in the "http://apache.org/cocoon/sparql/1.0" namespace are used as request parameters.
  * The parameter name is the local name of the attribute. Note: This does not allow for multivalued parameters.
+ * 
  * The text content of the <code>query</code> element is passed as the value of the 'query' parameter in GET and
  * POST (www-form-urlencoded data) requests.
  * In PUT requests, it is the request entity (body). Note that this is text, even if you put RDF statements in it,
  * so XML must be escaped.
  * 
  * Example XML input, with content and parse attributes set to their default values:
- * <pre>
+ * <![CDATA[
  *   <sparql:query
  *     xmlns:sparql="http://apache.org/cocoon/sparql/1.0"
  *     xmlns:http="http://www.w3.org/2006/http#"
@@ -76,16 +88,16 @@ import org.xml.sax.SAXException;
  *     http:Accept="application/sparql-results+xml"
  *     sparql:maxrows="25" sparql:format="XML"
  *   >
- *   <![CDATA[
+ *   <! [CDATA[
  *     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
  *     SELECT *
  *     FROM <http://dbpedia.org>
  *     WHERE {
  *       ?person rdf:type <http://dbpedia.org/class/yago/Person100007846> .
  *     }
- *   ]]>
+ *   ]] >
  *   </sparql:query>
- * </pre>
+ * ]]>
  * 
  * @author Nico Verwer (nico.verwer@withart.com)
  *
@@ -176,7 +188,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
     }
   }
 
-  private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
+private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
     HttpMethod httpMethod = null;
