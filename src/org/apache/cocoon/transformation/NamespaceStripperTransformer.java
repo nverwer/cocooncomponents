@@ -50,8 +50,8 @@ public class NamespaceStripperTransformer extends AbstractTransformer {
   }
 
   public void startElement(String uri, String loc, String raw, Attributes a) throws SAXException {
-    if (uri != null && !uri.equals("") && raw.contains(":")) {
-      String prefix = raw.substring(0, raw.indexOf(':'));
+    if (uri != null && !uri.equals("")) {
+      String prefix = raw.contains(":") ? raw.substring(0, raw.indexOf(':')) : "";
       enterPrefix(prefix, uri);
     }
     Stack<String> attrNS = null;
@@ -70,8 +70,8 @@ public class NamespaceStripperTransformer extends AbstractTransformer {
 
   public void endElement(String uri, String loc, String raw) throws SAXException {
     super.endElement(uri, loc, raw);
-    if (uri != null && !uri.equals("") && raw.contains(":")) {
-      String prefix = raw.substring(0, raw.indexOf(':'));
+    if (uri != null && !uri.equals("")) {
+      String prefix = raw.contains(":") ? raw.substring(0, raw.indexOf(':')) : "";
       leavePrefix(prefix);
     }
     Stack<String> attrNS = attributeNamespaces.pop();
