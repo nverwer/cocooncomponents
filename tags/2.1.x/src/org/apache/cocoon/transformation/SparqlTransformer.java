@@ -76,7 +76,7 @@ import org.xml.sax.SAXException;
  * so XML must be escaped.
  * 
  * Example XML input, with content and parse attributes set to their default values:
- * <![CDATA[
+ * <pre>
  *   <sparql:query
  *     xmlns:sparql="http://apache.org/cocoon/sparql/1.0"
  *     xmlns:http="http://www.w3.org/2006/http#"
@@ -88,16 +88,16 @@ import org.xml.sax.SAXException;
  *     http:Accept="application/sparql-results+xml"
  *     sparql:maxrows="25" sparql:format="XML"
  *   >
- *   <! [CDATA[
+ *   <![CDATA[
  *     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
  *     SELECT *
  *     FROM <http://dbpedia.org>
  *     WHERE {
  *       ?person rdf:type <http://dbpedia.org/class/yago/Person100007846> .
  *     }
- *   ]] >
+ *   ]]>
  *   </sparql:query>
- * ]]>
+ * </pre>
  * 
  * @author Nico Verwer (nico.verwer@withart.com)
  *
@@ -188,7 +188,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
     }
   }
 
-private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
+  private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
     HttpMethod httpMethod = null;
