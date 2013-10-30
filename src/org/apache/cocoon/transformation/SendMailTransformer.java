@@ -54,7 +54,7 @@ import org.xml.sax.helpers.AttributesImpl;
  * </p>
  *
  * <p>
- * These two parameters can be defined already in the components-secion of the sitemap:
+ * These two parameters can be defined already in the components-section of the sitemap:
  *  <ul>
  *   <li>
  *     smtphost - the name of the host, e.g. "smtphost.company.com"
