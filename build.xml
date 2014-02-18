@@ -11,8 +11,14 @@
   </description>
 
   <property environment="env"/>
+  <fail message="You do not have a valid COCOON environment variable.">
+    <condition>
+      <not>
+        <available file="${env.COCOON}"/>
+      </not>
+    </condition>
+  </fail>
   <property name="cocoon.lib" location="${env.COCOON}/webapp/WEB-INF/lib"/>
-  <property name="cocoon.xconf" location="${env.COCOON}/webapp/WEB-INF/cocoon.xconf"/>
   <property name="src" location="src"/>
   <property name="lib" location="lib"/>
   <property name="build" location="build"/>
@@ -41,15 +47,7 @@
     <jar jarfile="${jarfile}" basedir="${build}"/>
   </target>
 
-  <target name="cocoon.xconf" description="Edit cocoon.xconf">
-    <xslt style="cocoon.xconf.xsl" force="true"
-        in="${cocoon.xconf}" out="${cocoon.xconf}.new">
-    </xslt>
-    <move file="${cocoon.xconf}" tofile="${cocoon.xconf}.bak" failonerror="true"/>
-    <move file="${cocoon.xconf}.new" tofile="${cocoon.xconf}" failonerror="true"/>
-  </target>
-
-  <target name="install" depends="jar, cocoon.xconf" description="install into Cocoon">
+  <target name="install" depends="jar" description="install into Cocoon">
     <copy todir="${cocoon.lib}" file="${jarfile}"/>
     <copy todir="${cocoon.lib}">
       <fileset dir="${lib}"><include name="*.jar"/></fileset>

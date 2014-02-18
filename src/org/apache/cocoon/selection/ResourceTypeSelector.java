@@ -85,6 +85,9 @@ public class ResourceTypeSelector extends AbstractSwitchSelector implements Serv
 
   @Override
   public void dispose() {
+    if (source != null) {
+      resolver.release(source);
+    }
     this.manager.release(this.resolver);
     this.resolver = null;
     this.manager = null;
