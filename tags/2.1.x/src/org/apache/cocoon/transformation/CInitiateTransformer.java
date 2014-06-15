@@ -4,7 +4,7 @@ package org.apache.cocoon.transformation;
 import java.io.*;
 import java.util.*;
 
-import org.apache.avalon.excalibur.io.IOUtil;
+import org.apache.commons.io.IOUtils;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.avalon.framework.logger.Logger;
 import org.apache.cocoon.ProcessingException;
@@ -230,7 +230,7 @@ public class CInitiateTransformer
         }
 */
         InputStream sourceInput = source.getInputStream();
-        IOUtil.copy(sourceInput, output);
+        IOUtils.copy(sourceInput, output);
         logger.info("Completing sub-process "+this.getName()+" ("+src+")");
       } catch (Exception e) {
         logger.error("Error in sub-process "+this.getName()+" ("+src+"):\n"+e.toString(), e.getCause());
