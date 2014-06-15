@@ -24,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
@@ -47,55 +48,86 @@ import org.joda.time.DateTime;
 
 /**
  *
- *
- * @author <a href="mailto:maarten.kroon@koop.overheid.nl">Maarten Kroon</a>
  * @author <a href="mailto:huib.verweij@koop.overheid.nl">Huib Verweij</a>
+ * @author <a href="mailto:maarten.kroon@koop.overheid.nl">Maarten Kroon</a>
  *
  * Execute jobs that are submitted to a queue.
  *
- * A queue is a directory on disk that contains jobs.
+ * A queue is a directory on disk that contains jobs-to-be-executed in
+ * the "in" subdirectory.
  *
- * A job is a zipped directory containing meta-data describing the job and one
- * or more smaller tasks that are part of the job.
+ * A job is a XML file containing meta-data describing the job and one
+ * or more smaller tasks that are part of the job. A task contains a URL
+ * that is 'resolved' when the task is executed. The output of the URL
+ * ends up in a task-{id}.xml file. Note that tasks are executed 
+ * *** in random order ***.
  *
- * A queue has four directories, in, in-progress, out and error. 1 New jobs that
- * are waiting to be processed are in "in". 2 The one job that is being executed
- * is in "in-progress". 3 Finished jobs are moved to "out". 4 Jobs that could
- * not be executed at all end up in "error".
+ * A queue has four directories: "in", "in-progress", "out" and "error".
+ * 1 New jobs that are waiting to be processed are in "in".
+ * 2 The one job that is being executed is in "in-progress".
+ * 3 Finished jobs are zipped. Job-file and task-output files end up in "out".
+ * 4 Jobs that could not be executed at all (or generated an error in
+ *   this class)end up in "error".
  *
  * Execute this object (a "Processor") every n (micro)seconds using a Cocoon
  * Quartz job and it will process one job in a queue. Processing a job means
- * unzipping the job.zip and starting a separate thread for each task in the
- * job. Every thread is 'join'ed so there are no runaway processes.
+ * moveing the job-*.xml file to "in-progress" and starting a separate thread
+ * for each task in the job, then waiting till all tasks have finished.
  *
- * While executing, a Processor updates the file processor-status.xml every 10
- * seconds or so with the following info:
- * <processor id="(OS?) process-id" started="dateTime" tasks="nr of tasks"
- * tasks-completed="nr of completed tasks" task-started-at="time current task
- * was started"/>
+ * While executing, a Processor updates the file Queue/processor-status.xml
+ * every 10 seconds or so with the following info:
+ * &lt;processor id="thread-id" started="dateTime" tasks="nr of tasks"
+ * tasks-completed="nr of completed tasks" />
  * This file can be read in order to get an idea of the progress of the current
  * job. It also indicates whether the current job is being processed at all - if
  * the modified timestamp of the file is older than, say, a minute, it is
  * assumed the Processor/job has failed.
  *
- * When a Processor starts there are a few possible scenarios: 1 another job is
- * already being processed and that Processor is still alive -> quit. 2 there is
- * no job to be processed -> quit. 3 there is no other Processor running but
- * there's a job already being processed -> move job to "error"-directory, quit.
- * 4 there is a job to be processed and no Processor active -> start processing
- * new job.
+ * When a Processor starts there are a few possible scenarios:
+ * 1 another job is already being processed and that Processor is
+ *      still alive -> quit.
+ * 2 there is no job to be processed -> quit.
+ * 3 there is no other Processor running but there's a job already 
+ *      being processed -> move job to "error"-directory, quit.
+ * 4 there is a job to be processed and no Processor active -> 
+ *      start processing a new job.
  *
- * To submit a job, upload a XML called "job-*.xml", containing the following
- * structure:
- * <job name="test-job" created="20140613T11:45:00" max-concurrent="3">
- * <tasks>
- * <task id="task-1">
- * <uri>http://localhost:8888/koop/front/queue-test?id=1</uri>
- * </task>
- * ...
- * </tasks>
- * </job>
+ * To submit a job, place a XML file called "job-{id}.xml" in the "in"-directory,
+ * containing the following structure:
+ * &lt;job name="test-job" created="20140613T11:45:00" max-concurrent="3">
+ *   &lt;tasks>
+ *     &lt;task id="task-1">
+ *       &lt;uri>http://localhost:8888/koop/front/queue-test?id=1&lt;/uri>
+ *     &lt;/task>
+ *     ...
+ *   &lt;/tasks>
+ * &lt;/job>
  *
+ * At the moment, the max-concurrent attribute is ignored and the maximum
+ * number of concurrent tasks is equal to the number of processors in the
+ * server.
+ * 
+ * To add this cronjob to Cocoon add a trigger to the Quartzcomponent
+ * configuration and declare this component in the same sitemap.
+ * &lt;component
+ *   class="org.apache.cocoon.components.cron.CocoonQuartzJobScheduler"
+ *   logger="cron"
+ *   role="org.apache.cocoon.components.cron.JobScheduler">
+ *    .....
+ *     &lt;trigger name="dequeue-job"
+ *       target="org.apache.cocoon.components.cron.CronJob/dequeue"
+ *       concurrent-runs="false">
+ *         &lt;cron>0/10 * * * * ?&lt;/cron>
+ *     &lt;/trigger>
+ * &lt;/component>
+ * 
+ * and
+ * 
+ * &lt;component class="org.apache.cocoon.components.cron.DequeueCronJob"
+ *   logger="cron.publish"
+ *   role="org.apache.cocoon.components.cron.CronJob/dequeue">
+ *      &lt;queue-path>/tmp/LiDO-queue&lt;/queue-path>
+ * &lt;/component>
  */
 public class DequeueCronJob extends ServiceableCronJob implements Configurable, ConfigurableCronJob {
 
@@ -103,17 +135,19 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
     private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
 
-    private final String inDirName = "in";
-    private final String processingDirName = "in-progress";
-    private final String outDirName = "out";
-    private final String errorDirName = "error";
+    private static final String inDirName = "in";
+    private static final String processingDirName = "in-progress";
+    private static final String outDirName = "out";
+    private static final String errorDirName = "error";
 
     private File queuePath;
     private final long DONT_WAIT_TOO_LONG = 8000;
 
+    
     /**
-     * Zip contents of processingDir into file, named after currentJob,
-     * into outDir.
+     * Zip contents of processingDir into "{currentJob-name}.zip" into outDir.
+     * The zip contains a directory {currentJob-name}, all other files are in
+     * that directory.
      *
      * @param processingDir
      * @param outDir
@@ -161,6 +195,10 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         }
     }
 
+    
+    /**
+     * The object that runs a task.
+     */
     private static class TaskRunner implements Callable {
 
         private final Task task;
@@ -178,7 +216,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         @Override
         public Object call() throws Exception {
             this.logger.info("Processing task " + task.id);
-//            Thread.sleep(4000);
+            Thread.sleep(4000);
             OutputStream os = new FileOutputStream(outputFile);
             processPipeline(task.uri, manager, logger, os);
             os.close();
@@ -195,7 +233,14 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         
     }
 
-//    private ExecutorService executor = Executors.newFixedThreadPool(1);
+    
+    /**
+     * Process a job: add all tasks to ExecutorService, invokeAll tasks
+     * and wait until all tasks have finished. While waiting, update
+     * processor-status.xml.
+     * @param inDir Where all output files are stored.
+     * @param currentJob The current job file.
+     */
     private void processCurrentJob(File inDir, File currentJob) {
         this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
 
@@ -208,7 +253,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
         int processors = Runtime.getRuntime().availableProcessors();
         ExecutorService jobExecutor = Executors.newFixedThreadPool(processors);
-        this.getLogger().info("Max concurrent jobs = " + processors);
+        this.getLogger().debug("Max concurrent jobs = " + processors);
 
         Set<Callable<TaskRunner>> callables = new HashSet<Callable<TaskRunner>>();
 
@@ -223,12 +268,15 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
             for (Future<TaskRunner> future : futures) {
                 try {
-                    this.getLogger().info("future.get = " + future.get());
+                    future.get(500, TimeUnit.MILLISECONDS);
                     completedTasks--;
-                    writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
                 } catch (ExecutionException ex) {
                     Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
                     completedTasks--;
+                } catch (TimeoutException ex) {
+                    Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
+                } finally {
+                    writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
                 }
             }
             jobExecutor.shutdown();
