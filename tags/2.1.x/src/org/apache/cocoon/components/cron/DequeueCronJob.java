@@ -269,10 +269,10 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             for (Future<TaskRunner> future : futures) {
                 try {
                     future.get(500, TimeUnit.MILLISECONDS);
-                    completedTasks--;
+                    completedTasks++;
                 } catch (ExecutionException ex) {
                     Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
-                    completedTasks--;
+                    completedTasks++;
                 } catch (TimeoutException ex) {
                     Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
                 } finally {
@@ -316,12 +316,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         xstream.useAttributeFor(Task.class, "id");
 
         JobConfig jobConfig = (JobConfig) xstream.fromXML(currentJob);
-
-        this.getLogger().info("jobConfig.name = " + jobConfig.name);
-        this.getLogger().info("jobConfig.created = " + jobConfig.created);
-        this.getLogger().info("jobConfig.maxConcurrent = " + jobConfig.maxConcurrent);
-        this.getLogger().info("jobConfig.tasks = " + jobConfig.tasks);
-        this.getLogger().info("jobConfig.tasks.length = " + jobConfig.tasks.length);
 
         return jobConfig;
     }
@@ -523,7 +517,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 if (this.getLogger().isDebugEnabled()) {
                     this.getLogger().debug(String.format("Active job \"%s\" in queue \"%s\", stopping", currentJobFile, queueDir));
                 }
-                return;
             }
             else {            
                 /*
@@ -533,7 +526,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 this.getLogger().warn(String.format("Stale job \"%s\" in queue \"%s\", cancelling job and stopping", currentJobFile, queueDir));
                 moveFileTo(currentJobFile, new File(errorDir, currentJobFile.getName()));
                 FileUtils.cleanDirectory(processingDir);
-                return;
             }
         }
         else {
@@ -561,7 +553,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
                     finishUpJob(processingDir, outDir, currentJob);
 
-                } catch (IOException e) {
+                } catch (Exception e) { // Catch IOException AND catch ClassCast exception etc.
                     if (this.getLogger().isErrorEnabled()) {
                         this.getLogger().error("Error processing job \"" + jobFileName + "\"", e);
                     }
