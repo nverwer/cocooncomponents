@@ -118,7 +118,8 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
-    private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
+    private static final long   PROCESSOR_STATUS_FILE_STALE = 60000;
+    private static final String PROPERTY_FILENAME = "regellinks.properties";
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
@@ -234,7 +235,9 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         int completedTasks = 0;
         DateTime jobStartedAt = new DateTime();
 
-        ExecutorService threadPool = Executors.newFixedThreadPool(jobConfig.maxConcurrent);
+        int availableProcessors = Runtime.getRuntime().availableProcessors();
+        ExecutorService threadPool = Executors.newFixedThreadPool(availableProcessors);
+        this.getLogger().info("Using " + availableProcessors + " processors to execute tasks.");
 
         CompletionService<TaskRunner> jobExecutor = new ExecutorCompletionService<TaskRunner>(threadPool);
 
@@ -249,7 +252,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
         try {            
             while (completedTasks < totalTasks) {
-                this.getLogger().info("Waiting for all tasks to finish after invokeAll(), completedTasks="+completedTasks+", totalTasks="+totalTasks+".");
+                this.getLogger().info("Waiting for all tasks to finish: completedTasks="+completedTasks+", totalTasks="+totalTasks+".");
                 jobExecutor.take().get();
                 completedTasks++;
                 writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
@@ -259,8 +262,15 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 this.getLogger().info("Waiting for all tasks to finish after shutdown().");
             }
         } catch (InterruptedException ex) {
-            Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
-            threadPool.shutdownNow();
+            threadPool.shutdown();
+            try {
+                while (!threadPool.awaitTermination(DONT_WAIT_TOO_LONG, TimeUnit.MILLISECONDS)) {
+                    this.getLogger().info("Waiting for all tasks to finish after shutdown().");
+                }
+            } catch (InterruptedException ex1) {
+                Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex1);
+                threadPool.shutdownNow();
+            }
         }
     }
 
@@ -297,7 +307,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     @SuppressWarnings("rawtypes")
     @Override
     public void setup(Parameters params, Map objects) {
-//        
+        
 //    try {
 //      props = this.getPropertiesFromClasspath(PROPERTY_FILENAME);
 //    } catch (Exception e) {
@@ -338,7 +348,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 completedTasks);
         try {
             FileUtils.writeStringToFile(pStatusFile, status, "UTF-8");
-            Logger.getLogger(DequeueCronJob.class.getName()).log(Level.INFO, status, status);
         } catch (IOException ex) {
             Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -455,7 +464,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             } catch (IOException e) {
                 throw new CascadingRuntimeException("DequeueCronJob raised an exception.", e);
             }
-            if (resolver != null) {
+            if (null != manager && resolver != null) {
                 resolver.release(src);
                 manager.release(resolver);
                 resolver = null;
@@ -517,6 +526,8 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 File currentJob = new File(processingDir, jobFileName);
 
                 try {
+
+                    FileUtils.cleanDirectory(processingDir);
 
                     writeProcessorStatus(jobFileName, new DateTime(), 0, 0);
 
