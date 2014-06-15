@@ -13,22 +13,18 @@ import java.io.PrintStream;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.Enumeration;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Properties;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 import org.apache.avalon.framework.CascadingRuntimeException;
 import org.apache.avalon.framework.configuration.Configurable;
@@ -53,21 +49,19 @@ import org.joda.time.DateTime;
  *
  * Execute jobs that are submitted to a queue.
  *
- * A queue is a directory on disk that contains jobs-to-be-executed in
- * the "in" subdirectory.
+ * A queue is a directory on disk that contains jobs-to-be-executed in the "in"
+ * subdirectory.
  *
- * A job is a XML file containing meta-data describing the job and one
- * or more smaller tasks that are part of the job. A task contains a URL
- * that is 'resolved' when the task is executed. The output of the URL
- * ends up in a task-{id}.xml file. Note that tasks are executed 
- * *** in random order ***.
+ * A job is a XML file containing meta-data describing the job and one or more
+ * smaller tasks that are part of the job. A task contains a URL that is
+ * 'resolved' when the task is executed. The output of the URL ends up in a
+ * task-{id}.xml file. Note that tasks are executed *** in random order ***.
  *
- * A queue has four directories: "in", "in-progress", "out" and "error".
- * 1 New jobs that are waiting to be processed are in "in".
- * 2 The one job that is being executed is in "in-progress".
- * 3 Finished jobs are zipped. Job-file and task-output files end up in "out".
- * 4 Jobs that could not be executed at all (or generated an error in
- *   this class)end up in "error".
+ * A queue has four directories: "in", "in-progress", "out" and "error". 1 New
+ * jobs that are waiting to be processed are in "in". 2 The one job that is
+ * being executed is in "in-progress". 3 Finished jobs are zipped. Job-file and
+ * task-output files end up in "out". 4 Jobs that could not be executed at all
+ * (or generated an error in this class)end up in "error".
  *
  * Execute this object (a "Processor") every n (micro)seconds using a Cocoon
  * Quartz job and it will process one job in a queue. Processing a job means
@@ -75,59 +69,50 @@ import org.joda.time.DateTime;
  * for each task in the job, then waiting till all tasks have finished.
  *
  * While executing, a Processor updates the file Queue/processor-status.xml
- * every 10 seconds or so with the following info:
- * &lt;processor id="thread-id" started="dateTime" tasks="nr of tasks"
- * tasks-completed="nr of completed tasks" />
- * This file can be read in order to get an idea of the progress of the current
- * job. It also indicates whether the current job is being processed at all - if
- * the modified timestamp of the file is older than, say, a minute, it is
- * assumed the Processor/job has failed.
+ * every 10 seconds or so with the following info: &lt;processor id="thread-id"
+ * started="dateTime" tasks="nr of tasks" tasks-completed="nr of completed
+ * tasks" /> This file can be read in order to get an idea of the progress of
+ * the current job. It also indicates whether the current job is being processed
+ * at all - if the modified timestamp of the file is older than, say, a minute,
+ * it is assumed the Processor/job has failed. However, when more than one
+ * DequeueCronJob is allowed to run at the same time, this can go wrong if a
+ * task takes longer to complete than said minute. This is because the 
+ * processor-status.xml file is only updated after a task has completed
+ * (successfully or not). It is therefore recommended to have the 
+ * concurrent-runs="false" attribute on a Trigger.
  *
- * When a Processor starts there are a few possible scenarios:
- * 1 another job is already being processed and that Processor is
- *      still alive -> quit.
- * 2 there is no job to be processed -> quit.
- * 3 there is no other Processor running but there's a job already 
- *      being processed -> move job to "error"-directory, quit.
- * 4 there is a job to be processed and no Processor active -> 
- *      start processing a new job.
+ * When a Processor starts there are a few possible scenarios: 1 another job is
+ * already being processed and that Processor is still alive -> quit. 2 there is
+ * no job to be processed -> quit. 3 there is no other Processor running but
+ * there's a job already being processed -> move job to "error"-directory, quit.
+ * 4 there is a job to be processed and no Processor active -> start processing
+ * a new job.
  *
- * To submit a job, place a XML file called "job-{id}.xml" in the "in"-directory,
- * containing the following structure:
- * &lt;job name="test-job" created="20140613T11:45:00" max-concurrent="3">
- *   &lt;tasks>
- *     &lt;task id="task-1">
- *       &lt;uri>http://localhost:8888/koop/front/queue-test?id=1&lt;/uri>
- *     &lt;/task>
- *     ...
- *   &lt;/tasks>
- * &lt;/job>
+ * To submit a job, place a XML file called "job-{id}.xml" in the
+ * "in"-directory, containing the following structure: &lt;job name="test-job"
+ * created="20140613T11:45:00" max-concurrent="3"> &lt;tasks> &lt;task
+ * id="task-1">
+ * &lt;uri>http://localhost:8888/koop/front/queue-test?id=1&lt;/uri> &lt;/task>
+ * ... &lt;/tasks> &lt;/job>
  *
- * At the moment, the max-concurrent attribute is ignored and the maximum
- * number of concurrent tasks is equal to the number of processors in the
- * server.
- * 
+ * At the moment, the max-concurrent attribute is ignored and the maximum number
+ * of concurrent tasks is equal to the number of processors in the server.
+ *
  * To add this cronjob to Cocoon add a trigger to the Quartzcomponent
- * configuration and declare this component in the same sitemap.
- * &lt;component
- *   class="org.apache.cocoon.components.cron.CocoonQuartzJobScheduler"
- *   logger="cron"
- *   role="org.apache.cocoon.components.cron.JobScheduler">
- *    .....
- *     &lt;trigger name="dequeue-job"
- *       target="org.apache.cocoon.components.cron.CronJob/dequeue"
- *       concurrent-runs="false">
- *         &lt;cron>0/10 * * * * ?&lt;/cron>
- *     &lt;/trigger>
+ * configuration and declare this component in the same sitemap. &lt;component
+ * class="org.apache.cocoon.components.cron.CocoonQuartzJobScheduler"
+ * logger="cron" role="org.apache.cocoon.components.cron.JobScheduler"> .....
+ * &lt;trigger name="dequeue-job"
+ * target="org.apache.cocoon.components.cron.CronJob/dequeue"
+ * concurrent-runs="false"> &lt;cron>0/10 * * * * ?&lt;/cron> &lt;/trigger>
  * &lt;/component>
- * 
+ *
  * and
- * 
+ *
  * &lt;component class="org.apache.cocoon.components.cron.DequeueCronJob"
- *   logger="cron.publish"
- *   role="org.apache.cocoon.components.cron.CronJob/dequeue">
- *      &lt;queue-path>/tmp/LiDO-queue&lt;/queue-path>
- * &lt;/component>
+ * logger="cron.publish"
+ * role="org.apache.cocoon.components.cron.CronJob/dequeue">
+ * &lt;queue-path>/tmp/LiDO-queue&lt;/queue-path> &lt;/component>
  */
 public class DequeueCronJob extends ServiceableCronJob implements Configurable, ConfigurableCronJob {
 
@@ -140,10 +125,10 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     private static final String outDirName = "out";
     private static final String errorDirName = "error";
 
+    private Properties props;
     private File queuePath;
     private final long DONT_WAIT_TOO_LONG = 8000;
 
-    
     /**
      * Zip contents of processingDir into "{currentJob-name}.zip" into outDir.
      * The zip contains a directory {currentJob-name}, all other files are in
@@ -174,7 +159,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             File[] files = processingDir.listFiles();
 
             for (File file : files) {
-                System.out.println("Adding file: " + file.getName());
+                System.out.println("Adding file to job-zip: " + file.getName());
                 FileInputStream fis = new FileInputStream(file);
                 // begin writing a new ZIP entry, positions the stream to the start of the entry data
                 zos.putNextEntry(new ZipEntry(zipFolder + file.getName()));
@@ -195,7 +180,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         }
     }
 
-    
     /**
      * The object that runs a task.
      */
@@ -216,7 +200,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         @Override
         public Object call() throws Exception {
             this.logger.info("Processing task " + task.id);
-            Thread.sleep(4000);
+//            Thread.sleep(4000);
             OutputStream os = new FileOutputStream(outputFile);
             processPipeline(task.uri, manager, logger, os);
             os.close();
@@ -230,18 +214,18 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     public enum ProcessorStatus {
 
         ALIVE, DEAD, NONE
-        
+
     }
 
-    
     /**
-     * Process a job: add all tasks to ExecutorService, invokeAll tasks
-     * and wait until all tasks have finished. While waiting, update
+     * Process a job: add all tasks to ExecutorService, invokeAll tasks and wait
+     * until all tasks have finished. While waiting, update
      * processor-status.xml.
+     *
      * @param inDir Where all output files are stored.
      * @param currentJob The current job file.
      */
-    private void processCurrentJob(File inDir, File currentJob) {
+    private void processCurrentJob(File inDir, File currentJob) throws ExecutionException {
         this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
 
         JobConfig jobConfig = readJobConfig(currentJob);
@@ -250,46 +234,36 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         int completedTasks = 0;
         DateTime jobStartedAt = new DateTime();
 
+        ExecutorService threadPool = Executors.newFixedThreadPool(jobConfig.maxConcurrent);
 
-        int processors = Runtime.getRuntime().availableProcessors();
-        ExecutorService jobExecutor = Executors.newFixedThreadPool(processors);
-        this.getLogger().debug("Max concurrent jobs = " + processors);
+        CompletionService<TaskRunner> jobExecutor = new ExecutorCompletionService<TaskRunner>(threadPool);
 
-        Set<Callable<TaskRunner>> callables = new HashSet<Callable<TaskRunner>>();
-
+        int submittedJobs = 0;
         for (Task t : jobConfig.tasks) {
             File outputFile = new File(inDir, String.format("task-%s.output", t.id));
             Callable taskRunner = new TaskRunner(t, this.manager, this.getLogger(), outputFile);
-            callables.add(taskRunner);
+            jobExecutor.submit(taskRunner);
+            submittedJobs++;
         }
+        this.getLogger().info("Submitted " + submittedJobs + "jobs.");
 
-        try {
-            List<Future<TaskRunner>> futures = jobExecutor.invokeAll(callables);
-
-            for (Future<TaskRunner> future : futures) {
-                try {
-                    future.get(500, TimeUnit.MILLISECONDS);
-                    completedTasks++;
-                } catch (ExecutionException ex) {
-                    Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
-                    completedTasks++;
-                } catch (TimeoutException ex) {
-                    Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
-                } finally {
-                    writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
-                }
+        try {            
+            while (completedTasks < totalTasks) {
+                this.getLogger().info("Waiting for all tasks to finish after invokeAll(), completedTasks="+completedTasks+", totalTasks="+totalTasks+".");
+                jobExecutor.take().get();
+                completedTasks++;
+                writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
             }
-            jobExecutor.shutdown();
-            while (!jobExecutor.awaitTermination(DONT_WAIT_TOO_LONG, TimeUnit.MILLISECONDS)) {
-                this.getLogger().info("Waiting for all tasks to finish ");
+            threadPool.shutdown();
+            while (!threadPool.awaitTermination(DONT_WAIT_TOO_LONG, TimeUnit.MILLISECONDS)) {
+                this.getLogger().info("Waiting for all tasks to finish after shutdown().");
             }
         } catch (InterruptedException ex) {
             Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
-            jobExecutor.shutdownNow();
+            threadPool.shutdownNow();
         }
     }
 
-    
     /**
      * Read job description file into JobConfig object using XStream.
      *
@@ -320,14 +294,23 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         return jobConfig;
     }
 
-    
     @SuppressWarnings("rawtypes")
     @Override
     public void setup(Parameters params, Map objects) {
+//        
+//    try {
+//      props = this.getPropertiesFromClasspath(PROPERTY_FILENAME);
+//    } catch (Exception e) {
+//      throw new RuntimeException(e);
+//    }
+//    String queueDirVal = props.getProperty(PARAMETER_QUEUEDIR);
+//    if (StringUtils.isBlank(queueDirVal)) {
+//      throw new RuntimeException(String.format("Property \"%s\" not specified", PARAMETER_QUEUEDIR));
+//    }
+//    queueDir = new File(queueDirVal);
         return;
     }
 
-    
     /**
      * We're done, delete status file.
      */
@@ -336,7 +319,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         pStatusFile.delete();
     }
 
-    
     /**
      * Update status file.
      *
@@ -363,9 +345,9 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
     }
 
-    
     /**
      * Return File object for parent/path, creating it if necessary.
+     *
      * @param parent
      * @param path
      * @return Resulting File object.
@@ -378,13 +360,13 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         return dir;
     }
 
-    
     /**
-     * Move file from one File object to another File object, deleting
-     * an already existing file if necessary.
+     * Move file from one File object to another File object, deleting an
+     * already existing file if necessary.
+     *
      * @param fromFile
      * @param toFile
-     * @throws IOException 
+     * @throws IOException
      */
     private void moveFileTo(File fromFile, File toFile) throws IOException {
         if (toFile.isFile()) {
@@ -397,13 +379,13 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         }
     }
 
-    
     /**
-     * Get oldest job (file named "job-*.xml") in dir, using
-     * lastModified timestamp and picking first File if there is more
-     * than one file with the same lastModified.
+     * Get oldest job (file named "job-*.xml") in dir, using lastModified
+     * timestamp and picking first File if there is more than one file with the
+     * same lastModified.
+     *
      * @param dir
-     * @return 
+     * @return
      */
     protected File getOldestJobFile(File dir) {
         if (dir == null || !dir.isDirectory()) {
@@ -421,11 +403,11 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         return files[0];
     }
 
-    
     /**
      * Get path to queue folder.
+     *
      * @param config
-     * @throws ConfigurationException 
+     * @throws ConfigurationException
      */
     @Override
     public void configure(final Configuration config) throws ConfigurationException {
@@ -433,10 +415,10 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         queuePath = new File(actualQueuesDirName);
     }
 
-    
     /**
      * Process the URL in one Task. All errors are caught, if one task goes bad
      * continue processing the others.
+     *
      * @param url URL to fetch
      * @param manager Cocoon servicemanager (so cocoon: protocol is allowed.)
      * @param logger For logging stuff
@@ -449,7 +431,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         String cocoonPipeline = url;
         try {
 
-            logger.info(String.format("Processing: %s", url));
+//            logger.info(String.format("Processing: %s", url));
 
             resolver = (SourceResolver) manager.lookup(SourceResolver.ROLE);
             src = resolver.resolveURI(cocoonPipeline);
@@ -483,28 +465,27 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     }
 
     /**
-     * Check if there's a job in the processingDir.
-     * If yes then abstain if Processor = ALIVE, remove it otherwise.
-     * If No then move oldest job to processingDir, process that job.
+     * Check if there's a job in the processingDir. If yes then abstain if
+     * Processor = ALIVE, remove it otherwise. If No then move oldest job to
+     * processingDir, process that job.
      */
     private void processQueue() throws IOException {
 
         /*
-            Create subdirs if necessary.
-        */
+         Create subdirs if necessary.
+         */
         File queueDir = this.queuePath;
         File inDir = getOrCreateDirectory(queueDir, inDirName);
         File processingDir = getOrCreateDirectory(queueDir, processingDirName);
         File outDir = getOrCreateDirectory(queueDir, outDirName);
         File errorDir = getOrCreateDirectory(queueDir, errorDirName);
 
-
         // Get status of Processor
         DequeueCronJob.ProcessorStatus pStatus = processorStatus();
 
         File currentJobFile = getOldestJobFile(processingDir);
 
-        this.getLogger().info(String.format("Processor: %s, current job: %s", pStatus, currentJobFile));
+        this.getLogger().info(String.format("Processor: %s, queueDir=%s, current job: %s", pStatus, queueDir, currentJobFile));
 
         // A job is already being processed
         if (null != currentJobFile) {
@@ -517,8 +498,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 if (this.getLogger().isDebugEnabled()) {
                     this.getLogger().debug(String.format("Active job \"%s\" in queue \"%s\", stopping", currentJobFile, queueDir));
                 }
-            }
-            else {            
+            } else {
                 /*
                  * A job was processed, but the Processor is dead. 
                  * Move job tot error-folder. Clean processing folder.
@@ -527,8 +507,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 moveFileTo(currentJobFile, new File(errorDir, currentJobFile.getName()));
                 FileUtils.cleanDirectory(processingDir);
             }
-        }
-        else {
+        } else {
             // No job being processed.
             File jobFile = getOldestJobFile(inDir);
 
@@ -572,7 +551,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         }
     }
 
-    
     /**
      * Return NONE (No processor), ALIVE (Processor still active) or DEAD
      * (Processor hasn't updated status file for too long).
@@ -593,10 +571,10 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         }
     }
 
-    
     /**
      * Main entrypoint for CronJob.
-     * @param name 
+     *
+     * @param name
      */
     @Override
     public void execute(String name) {
@@ -610,17 +588,16 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         }
     }
 
-    
     /**
      * Classes used by XStream for loading the job-*.xml config files into.
      */
     private class Task {
 
         /*
-            <task id="task-*">
-                <uri>URI of task to be executed, f.i. "cocoon://bron/svb/incremental" or
-                "http://localhost:8888/import/bwbng"</uri>
-            </task>
+         <task id="task-*">
+         <uri>URI of task to be executed, f.i. "cocoon://bron/svb/incremental" or
+         "http://localhost:8888/import/bwbng"</uri>
+         </task>
          */
         private String id;
         private String uri;
