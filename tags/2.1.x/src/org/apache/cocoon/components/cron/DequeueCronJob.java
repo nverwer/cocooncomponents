@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -31,6 +32,7 @@ import org.apache.avalon.framework.configuration.Configurable;
 import org.apache.avalon.framework.configuration.Configuration;
 import org.apache.avalon.framework.configuration.ConfigurationException;
 import org.apache.avalon.framework.parameters.Parameters;
+import org.apache.avalon.framework.service.ServiceException;
 import org.apache.cocoon.components.cron.ConfigurableCronJob;
 import org.apache.cocoon.components.cron.ServiceableCronJob;
 import org.apache.commons.io.FileUtils;
@@ -76,9 +78,9 @@ import org.joda.time.DateTime;
  * at all - if the modified timestamp of the file is older than, say, a minute,
  * it is assumed the Processor/job has failed. However, when more than one
  * DequeueCronJob is allowed to run at the same time, this can go wrong if a
- * task takes longer to complete than said minute. This is because the 
+ * task takes longer to complete than said minute. This is because the
  * processor-status.xml file is only updated after a task has completed
- * (successfully or not). It is therefore recommended to have the 
+ * (successfully or not). It is therefore recommended to have the
  * concurrent-runs="false" attribute on a Trigger.
  *
  * When a Processor starts there are a few possible scenarios: 1 another job is
@@ -95,8 +97,12 @@ import org.joda.time.DateTime;
  * &lt;uri>http://localhost:8888/koop/front/queue-test?id=1&lt;/uri> &lt;/task>
  * ... &lt;/tasks> &lt;/job>
  *
- * At the moment, the max-concurrent attribute is ignored and the maximum number
- * of concurrent tasks is equal to the number of processors in the server.
+ * The max-concurrent attribute can be positive or negative. When it is 
+ * positive it is the maximum number of concurrent threads but the actual 
+ * number of concurrent threads can never be higher than the number of
+ * available cores. When it is negative the number of threads used is the 
+ * number of available cores plus the max-concurrent attribute (resulting in a
+ * smaller number); but it is always at least one.
  *
  * To add this cronjob to Cocoon add a trigger to the Quartzcomponent
  * configuration and declare this component in the same sitemap. &lt;component
@@ -118,7 +124,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
-    private static final long   PROCESSOR_STATUS_FILE_STALE = 60000;
+    private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
     private static final String PROPERTY_FILENAME = "regellinks.properties";
 
     private static final String inDirName = "in";
@@ -160,7 +166,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             File[] files = processingDir.listFiles();
 
             for (File file : files) {
-                System.out.println("Adding file to job-zip: " + file.getName());
+//                System.out.println("Adding file to job-zip: " + file.getName());
                 FileInputStream fis = new FileInputStream(file);
                 // begin writing a new ZIP entry, positions the stream to the start of the entry data
                 zos.putNextEntry(new ZipEntry(zipFolder + file.getName()));
@@ -177,7 +183,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             zos.close();
 
         } catch (IOException ioe) {
-            System.out.println("Error creating zip file" + ioe);
+            this.getLogger().info("Error creating zip file" + ioe);
         }
     }
 
@@ -187,24 +193,26 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     private static class TaskRunner implements Callable {
 
         private final Task task;
-        private final org.apache.avalon.framework.service.ServiceManager manager;
+        private final SourceResolver resolver;
         private final org.apache.avalon.framework.logger.Logger logger;
         private final File outputFile;
 
-        public TaskRunner(Task t, org.apache.avalon.framework.service.ServiceManager manager, org.apache.avalon.framework.logger.Logger logger, File outputFile) {
+        public TaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, File outputFile) {
             this.task = t;
-            this.manager = manager;
+            this.resolver = resolver;
             this.logger = logger;
             this.outputFile = outputFile;
         }
 
         @Override
         public Object call() throws Exception {
-            this.logger.info("Processing task " + task.id);
+//            this.logger.info("Processing task " + task.id + " called.");
 //            Thread.sleep(4000);
+//            System.out.println("Opening OutputStream " + outputFile);
             OutputStream os = new FileOutputStream(outputFile);
-            processPipeline(task.uri, manager, logger, os);
+            processPipeline(task.uri, resolver, logger, os);
             os.close();
+//            System.out.println("Closing OutputStream " + outputFile);
             return null;
         }
     }
@@ -226,7 +234,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
      * @param inDir Where all output files are stored.
      * @param currentJob The current job file.
      */
-    private void processCurrentJob(File inDir, File currentJob) throws ExecutionException {
+    private void processCurrentJob(File inDir, File currentJob) throws ServiceException {
         this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
 
         JobConfig jobConfig = readJobConfig(currentJob);
@@ -236,42 +244,67 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         DateTime jobStartedAt = new DateTime();
 
         int availableProcessors = Runtime.getRuntime().availableProcessors();
-        ExecutorService threadPool = Executors.newFixedThreadPool(availableProcessors);
-        this.getLogger().info("Using " + availableProcessors + " processors to execute tasks.");
+        int maxConcurrent = jobConfig.maxConcurrent;
+        int maxThreads = 1; // default nr of threads
+        if (maxConcurrent < 0) {
+            // If negative, subtract from availableProcessors, but of course,
+            // use at least one thread.
+            maxThreads = availableProcessors + maxConcurrent;
+            if (maxThreads < 1) {
+                maxThreads = 1;
+            }
+        }
+        else {
+            // Use specified maximum, but only if it is no more than what's
+            // available.
+            maxThreads = maxConcurrent;
+            if (maxConcurrent > availableProcessors) {
+                maxThreads = availableProcessors;
+            }
+        }
+        ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
+        this.getLogger().info("Using " + maxThreads + " processors to execute tasks.");
 
         CompletionService<TaskRunner> jobExecutor = new ExecutorCompletionService<TaskRunner>(threadPool);
+        SourceResolver resolver = (SourceResolver) this.manager.lookup(SourceResolver.ROLE);
 
-        int submittedJobs = 0;
+        int submittedTasks = 0;
         for (Task t : jobConfig.tasks) {
             File outputFile = new File(inDir, String.format("task-%s.output", t.id));
-            Callable taskRunner = new TaskRunner(t, this.manager, this.getLogger(), outputFile);
+            Callable taskRunner = new TaskRunner(t, resolver, this.getLogger(), outputFile);
             jobExecutor.submit(taskRunner);
-            submittedJobs++;
+            submittedTasks++;
         }
-        this.getLogger().info("Submitted " + submittedJobs + "jobs.");
+        this.getLogger().info("Submitted " + submittedTasks + " tasks.");
 
-        try {            
-            while (completedTasks < totalTasks) {
-                this.getLogger().info("Waiting for all tasks to finish: completedTasks="+completedTasks+", totalTasks="+totalTasks+".");
-                jobExecutor.take().get();
-                completedTasks++;
-                writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
-            }
-            threadPool.shutdown();
-            while (!threadPool.awaitTermination(DONT_WAIT_TOO_LONG, TimeUnit.MILLISECONDS)) {
-                this.getLogger().info("Waiting for all tasks to finish after shutdown().");
-            }
-        } catch (InterruptedException ex) {
-            threadPool.shutdown();
+        boolean interrupted = false;
+
+        threadPool.shutdown();
+        while (!threadPool.isTerminated()) {
+            Future<TaskRunner> f = null;
+            TaskRunner t = null;
             try {
-                while (!threadPool.awaitTermination(DONT_WAIT_TOO_LONG, TimeUnit.MILLISECONDS)) {
-                    this.getLogger().info("Waiting for all tasks to finish after shutdown().");
+                f = jobExecutor.take();
+                t = f.get();
+            } catch (ExecutionException eex) {
+                if (null != t) {
+                    this.getLogger().info("Received ExecutionException for task " + t.task.id + ", ignoring, continuing with other tasks.");
                 }
-            } catch (InterruptedException ex1) {
-                Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex1);
-                threadPool.shutdownNow();
+            } catch (InterruptedException iex) {
+                this.getLogger().info("Received InterruptedException, quitting executing tasks.");
+                interrupted = true;
+                break;
+            } catch (CascadingRuntimeException ex) {
+                this.getLogger().info("Received CascadingRuntimeException, ignoring, continuing with other tasks.");
             }
+            completedTasks++;
+            this.getLogger().info("Processing tasks: completedTasks=" + completedTasks + ", totalTasks=" + totalTasks + ".");
+            writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
         }
+        if (interrupted) {
+            threadPool.shutdownNow();
+        }
+        this.manager.release(resolver);
     }
 
     /**
@@ -307,7 +340,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     @SuppressWarnings("rawtypes")
     @Override
     public void setup(Parameters params, Map objects) {
-        
+
 //    try {
 //      props = this.getPropertiesFromClasspath(PROPERTY_FILENAME);
 //    } catch (Exception e) {
@@ -433,42 +466,29 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
      * @param logger For logging stuff
      * @param os Where the output ends up.
      */
-    private static void processPipeline(String url, org.apache.avalon.framework.service.ServiceManager manager, org.apache.avalon.framework.logger.Logger logger, OutputStream os) {
-        SourceResolver resolver = null;
+    private static void processPipeline(String url, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os) throws IOException {
         Source src = null;
         InputStream is = null;
-        String cocoonPipeline = url;
         try {
-
-//            logger.info(String.format("Processing: %s", url));
-
-            resolver = (SourceResolver) manager.lookup(SourceResolver.ROLE);
-            src = resolver.resolveURI(cocoonPipeline);
+            src = resolver.resolveURI(url);
             is = src.getInputStream();
             IOUtils.copy(is, os);
-
-        } catch (Exception e) {
-            try {
-                os.write(e.getMessage().getBytes());
-                os.write("\n".getBytes());
-                e.printStackTrace(new PrintStream(os));
-            } catch (IOException ex) {
-                Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
-            }
-            throw new CascadingRuntimeException(String.format("Error processing pipeline \"%s\"", cocoonPipeline), e);
+        } catch (IOException e) {
+            throw new CascadingRuntimeException(String.format("Error processing pipeline \"%s\"", url), e);
         } finally {
             try {
-                if (is != null) {
+                if (null != is) {
                     is.close();
                 }
             } catch (IOException e) {
-                throw new CascadingRuntimeException("DequeueCronJob raised an exception.", e);
-            }
-            if (null != manager && resolver != null) {
-                resolver.release(src);
-                manager.release(resolver);
-                resolver = null;
-                src = null;
+                throw new CascadingRuntimeException("DequeueCronJob raised an exception closing input stream on " + url + ".", e);
+            } finally {
+                if (null != src) {
+//                    logger.info(String.format("Releasing source: %s", src));
+
+                    resolver.release(src);
+                    src = null;
+                }
             }
         }
     }
@@ -483,7 +503,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         /*
          Create subdirs if necessary.
          */
-        File queueDir = this.queuePath;
+        File queueDir = getOrCreateDirectory(this.queuePath, "");
         File inDir = getOrCreateDirectory(queueDir, inDirName);
         File processingDir = getOrCreateDirectory(queueDir, processingDirName);
         File outDir = getOrCreateDirectory(queueDir, outDirName);
