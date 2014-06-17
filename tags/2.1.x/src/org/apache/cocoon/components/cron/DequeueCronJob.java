@@ -71,9 +71,12 @@ import org.joda.time.DateTime;
  * for each task in the job, then waiting till all tasks have finished.
  *
  * While executing, a Processor updates the file Queue/processor-status.xml
- * every 10 seconds or so with the following info: &lt;processor id="thread-id"
- * started="dateTime" tasks="nr of tasks" tasks-completed="nr of completed
- * tasks" /> This file can be read in order to get an idea of the progress of
+ * every 10 seconds or so with the following info:
+ *
+ * &lt;processor id="thread-id" started="dateTime"
+ * tasks="nr of tasks" tasks-completed="nr of completed tasks" />
+ *
+ * This file can be read in order to get an idea of the progress of
  * the current job. It also indicates whether the current job is being processed
  * at all - if the modified timestamp of the file is older than, say, a minute,
  * it is assumed the Processor/job has failed. However, when more than one
@@ -91,50 +94,60 @@ import org.joda.time.DateTime;
  * a new job.
  *
  * To submit a job, place a XML file called "job-{id}.xml" in the
- * "in"-directory, containing the following structure: &lt;job name="test-job"
- * created="20140613T11:45:00" max-concurrent="3"> &lt;tasks> &lt;task
- * id="task-1">
- * &lt;uri>http://localhost:8888/koop/front/queue-test?id=1&lt;/uri> &lt;/task>
- * ... &lt;/tasks> &lt;/job>
+ * "in"-directory, containing the following structure:
+ *
+ * &lt;job id="..." name="test-job" description="..."
+ * created="20140613T11:45:00" max-concurrent="3">
+ *    &lt;tasks>
+ *        &lt;task id="task-1">
+ *           &lt;uri>http://localhost:8888/koop/front/queue-test?id=1&lt;/uri>
+ *        &lt;/task>
+ *        ...
+ *    &lt;/tasks>
+ * &lt;/job>
  *
  * The max-concurrent attribute can be positive or negative. When it is 
  * positive it is the maximum number of concurrent threads but the actual 
- * number of concurrent threads can never be higher than the number of
+ * number of concurrent threads will never be higher than the number of
  * available cores. When it is negative the number of threads used is the 
  * number of available cores plus the max-concurrent attribute (resulting in a
  * smaller number); but it is always at least one.
  *
  * To add this cronjob to Cocoon add a trigger to the Quartzcomponent
- * configuration and declare this component in the same sitemap. &lt;component
- * class="org.apache.cocoon.components.cron.CocoonQuartzJobScheduler"
- * logger="cron" role="org.apache.cocoon.components.cron.JobScheduler"> .....
- * &lt;trigger name="dequeue-job"
- * target="org.apache.cocoon.components.cron.CronJob/dequeue"
- * concurrent-runs="false"> &lt;cron>0/10 * * * * ?&lt;/cron> &lt;/trigger>
+ * configuration and declare this component in the same sitemap.
+ *
+ * &lt;component
+ *   class="org.apache.cocoon.components.cron.CocoonQuartzJobScheduler"
+ *   logger="cron" role="org.apache.cocoon.components.cron.JobScheduler">
+ *   .....
+ *   &lt;trigger name="dequeue-job"
+ *       target="org.apache.cocoon.components.cron.CronJob/dequeue"
+ *       concurrent-runs="false">
+ *       &lt;cron>0/10 * * * * ?&lt;/cron>
+ *   &lt;/trigger>
  * &lt;/component>
  *
  * and
  *
  * &lt;component class="org.apache.cocoon.components.cron.DequeueCronJob"
- * logger="cron.publish"
- * role="org.apache.cocoon.components.cron.CronJob/dequeue">
- * &lt;queue-path>/tmp/LiDO-queue&lt;/queue-path> &lt;/component>
+ *    logger="cron.publish"
+ *    role="org.apache.cocoon.components.cron.CronJob/dequeue">
+ *    &lt;queue-path>path-to-queue-directory-on-disk&lt;/queue-path>
+ * &lt;/component>
+ *
  */
 public class DequeueCronJob extends ServiceableCronJob implements Configurable, ConfigurableCronJob {
 
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
-    private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
-    private static final String PROPERTY_FILENAME = "regellinks.properties";
+    private static final long   PROCESSOR_STATUS_FILE_STALE = 60000;
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
     private static final String outDirName = "out";
     private static final String errorDirName = "error";
 
-    private Properties props;
     private File queuePath;
-    private final long DONT_WAIT_TOO_LONG = 8000;
 
     /**
      * Copy job file to outDir, also, zip contents of processingDir into
@@ -153,7 +166,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         final String zipFolder = basename + "/";
 
         FileUtils.copyFileToDirectory(currentJob, outDir);
-        
+
         try {
 
             // create byte buffer
@@ -242,6 +255,8 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         int completedTasks = 0;
         DateTime jobStartedAt = new DateTime();
 
+        writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
+
         int availableProcessors = Runtime.getRuntime().availableProcessors();
         int maxConcurrent = jobConfig.maxConcurrent;
         int maxThreads = 1; // default nr of threads
@@ -252,8 +267,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             if (maxThreads < 1) {
                 maxThreads = 1;
             }
-        }
-        else {
+        } else {
             // Use specified maximum, but only if it is no more than what's
             // available.
             maxThreads = maxConcurrent;
@@ -262,7 +276,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             }
         }
         ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
-        this.getLogger().info("Using " + maxThreads + " processors to execute tasks.");
+        this.getLogger().info("Using " + maxThreads + " processors to execute " + totalTasks + " tasks.");
 
         CompletionService<TaskRunner> jobExecutor = new ExecutorCompletionService<TaskRunner>(threadPool);
         SourceResolver resolver = (SourceResolver) this.manager.lookup(SourceResolver.ROLE);
@@ -339,17 +353,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     @SuppressWarnings("rawtypes")
     @Override
     public void setup(Parameters params, Map objects) {
-
-//    try {
-//      props = this.getPropertiesFromClasspath(PROPERTY_FILENAME);
-//    } catch (Exception e) {
-//      throw new RuntimeException(e);
-//    }
-//    String queueDirVal = props.getProperty(PARAMETER_QUEUEDIR);
-//    if (StringUtils.isBlank(queueDirVal)) {
-//      throw new RuntimeException(String.format("Property \"%s\" not specified", PARAMETER_QUEUEDIR));
-//    }
-//    queueDir = new File(queueDirVal);
         return;
     }
 
