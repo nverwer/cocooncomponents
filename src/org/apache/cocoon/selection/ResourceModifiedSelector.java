@@ -39,15 +39,17 @@ import org.apache.excalibur.source.SourceResolver;
  *    &lt;/map:select&gt;
  * </pre>
  * 
- * The expressions in the when-tests compare the last-modified time of the resource pointed to by the src-parameter to a given time.
+ * The expressions in the when-tests compare the last-modified time of the resource, pointed to by the src-parameter,
+ * to a given time.
+ * When a resource does not exist, its last-modified-time is zero, which corresponds to long ago.
  * 
- * The first part is a comparison-operator, '<' or '>', specifying less than or more than the indicated time.
+ * The first part is a comparison-operator, '<' or '>', specifying before or after the indicated time.
  * The indicated time follows the comparison-operator. This can be either:
  * - A positive integer followed by a time unit, which can be "minutes?", "hours?", "days?" or "weeks?".
  *   This indicates a period before the current time, i.e. it is a number of time units 'ago'.
  * - A colon followed by a resource URI; the last-modified time is compared to the last-modified time of this resource.
  * 
- * Spaces between the part of a when-test are optionsl.
+ * Spaces between the part of a when-test are optional.
  * 
  * If all when-tests fail or the resource does not exist, the otherwise-branch is taken.
  */
@@ -77,7 +79,7 @@ public class ResourceModifiedSelector extends AbstractSwitchSelector implements
     src = parameters.getParameter("src", "");
     try {
       source = resolver.resolveURI(src);
-      lastModified = source.getLastModified();
+      lastModified = source.getLastModified(); // Supposed to be 0 when source doesn't exist.
     } catch (MalformedURLException e) {
       throw new IllegalArgumentException(e);
     } catch (IOException e) {
