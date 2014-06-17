@@ -269,7 +269,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
         int submittedTasks = 0;
         for (Task t : jobConfig.tasks) {
-            File outputFile = new File(inDir, String.format("task-%s.output", t.id));
+            File outputFile = new File(inDir, String.format("task-%s.xml", t.id));
             Callable taskRunner = new TaskRunner(t, resolver, this.getLogger(), outputFile);
             jobExecutor.submit(taskRunner);
             submittedTasks++;
@@ -638,7 +638,9 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
     private class JobConfig {
 
-        // <job name="job-name" created="date" max-concurrent="n">tasks...</job>
+        // <job id="71qyqha7a-91ajauq" name="job-name" description="task"
+        //      created="date" max-concurrent="n">tasks...</job>
+        private String id;
         private String name;
         private String description;
         private DateTime created;
