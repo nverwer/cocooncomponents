@@ -166,7 +166,6 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             File[] files = processingDir.listFiles();
 
             for (File file : files) {
-//                System.out.println("Adding file to job-zip: " + file.getName());
                 FileInputStream fis = new FileInputStream(file);
                 // begin writing a new ZIP entry, positions the stream to the start of the entry data
                 zos.putNextEntry(new ZipEntry(zipFolder + file.getName()));
@@ -207,12 +206,9 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         @Override
         public Object call() throws Exception {
 //            this.logger.info("Processing task " + task.id + " called.");
-//            Thread.sleep(4000);
-//            System.out.println("Opening OutputStream " + outputFile);
             OutputStream os = new FileOutputStream(outputFile);
             processPipeline(task.uri, resolver, logger, os);
             os.close();
-//            System.out.println("Closing OutputStream " + outputFile);
             return null;
         }
     }
@@ -246,8 +242,8 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         int availableProcessors = Runtime.getRuntime().availableProcessors();
         int maxConcurrent = jobConfig.maxConcurrent;
         int maxThreads = 1; // default nr of threads
-        if (maxConcurrent < 0) {
-            // If negative, subtract from availableProcessors, but of course,
+        if (maxConcurrent <= 0) {
+            // If negative, add to availableProcessors, but of course,
             // use at least one thread.
             maxThreads = availableProcessors + maxConcurrent;
             if (maxThreads < 1) {
