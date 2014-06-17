@@ -137,7 +137,8 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     private final long DONT_WAIT_TOO_LONG = 8000;
 
     /**
-     * Zip contents of processingDir into "{currentJob-name}.zip" into outDir.
+     * Copy job file to outDir, also, zip contents of processingDir into
+     * "{currentJob-name}.zip" into outDir.
      * The zip contains a directory {currentJob-name}, all other files are in
      * that directory.
      *
@@ -145,12 +146,14 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
      * @param outDir
      * @param currentJob
      */
-    private void finishUpJob(File processingDir, File outDir, File currentJob) {
+    private void finishUpJob(File processingDir, File outDir, File currentJob) throws IOException {
         final String basename = FilenameUtils.getBaseName(currentJob.getName());
         final String zipFileName = String.format("%s.zip", basename);
         File zipFile = new File(outDir, zipFileName);
         final String zipFolder = basename + "/";
 
+        FileUtils.copyFileToDirectory(currentJob, outDir);
+        
         try {
 
             // create byte buffer
@@ -637,6 +640,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
         // <job name="job-name" created="date" max-concurrent="n">tasks...</job>
         private String name;
+        private String description;
         private DateTime created;
         private Integer maxConcurrent;
         private Task[] tasks;
