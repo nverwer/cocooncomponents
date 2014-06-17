@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Map;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
 
 import org.apache.avalon.framework.activity.Disposable;
 import org.apache.avalon.framework.parameters.Parameters;
@@ -26,6 +28,9 @@ import org.apache.excalibur.source.impl.FileSource;
  *           ...
  *       &lt;/map:when&gt;
  *       &lt;map:when test="directory"&gt;
+ *           ...
+ *       &lt;/map:when&gt;
+ *       &lt;map:when test="zipfile"&gt;
  *           ...
  *       &lt;/map:when&gt;
  *       &lt;map:when test="file"&gt;
@@ -75,12 +80,26 @@ public class ResourceTypeSelector extends AbstractSwitchSelector implements Serv
         return file.isDirectory();
       } else if (expression.equals("file")) {
         return file.isFile();
+      } else if (expression.equals("zipfile")) {
+        return isZipFile(file) ;
       } else {
         return false;
       }
     } else {
       return false;
     }
+  }
+
+  private boolean isZipFile(File file) {
+    if (!file.isFile()) return false;
+    try {
+      ZipFile zf = new ZipFile(file);
+    } catch (ZipException e) {
+      return false;
+    } catch (IOException e) {
+      return false;
+    }
+    return true;
   }
 
   @Override
