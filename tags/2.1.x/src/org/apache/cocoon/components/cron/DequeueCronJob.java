@@ -5,11 +5,13 @@ import com.thoughtworks.xstream.io.xml.DomDriver;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.StringWriter;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
@@ -140,7 +142,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
 
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
-    private static final long   PROCESSOR_STATUS_FILE_STALE = 60000;
+    private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
@@ -210,29 +212,31 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         private final Task task;
         private final SourceResolver resolver;
         private final org.apache.avalon.framework.logger.Logger logger;
-        private final File outputFile;
+        private final OutputStream os;
+        String result;
 
-        public TaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, File outputFile) {
+        public TaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os) {
             this.task = t;
             this.resolver = resolver;
             this.logger = logger;
-            this.outputFile = outputFile;
+            this.os = os;
         }
 
         @Override
-        public Object call() throws Exception {
+        public String call() throws Exception {
+            
+            String pipelineResult = null;
 //            this.logger.info("Processing task " + task.id + " called.");
-            OutputStream os = new FileOutputStream(outputFile);
             try {
-                processPipeline(task.uri, resolver, logger, os);
+                pipelineResult = processPipeline(task.uri, resolver, logger, os);
             }
             catch (Exception ex) {
+                logger.info("Exception for task " + task.uri);
                 throw ex;
             }
-            finally {
-                os.close();
-            }
-            return null;
+            result = String.format("TASK %s\nRESULT=%s\n\n", this.task.id, pipelineResult);
+//            this.logger.info("Processing task " + task.id + " result="+result);
+            return result;
         }
     }
 
@@ -253,7 +257,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
      * @param inDir Where all output files are stored.
      * @param currentJob The current job file.
      */
-    private void processCurrentJob(File inDir, File currentJob) throws ServiceException {
+    private void processCurrentJob(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException {
         this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
 
         JobConfig jobConfig = readJobConfig(currentJob);
@@ -283,15 +287,17 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             }
         }
         ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
-        this.getLogger().info("Using " + maxThreads + " processors to execute " + totalTasks + " tasks.");
+        this.getLogger().info("Using " + maxThreads + " threads to execute " + totalTasks + " tasks.");
 
         CompletionService<TaskRunner> jobExecutor = new ExecutorCompletionService<TaskRunner>(threadPool);
         SourceResolver resolver = (SourceResolver) this.manager.lookup(SourceResolver.ROLE);
 
+        File outputFile = new File(inDir, "task-results.txt");
+        OutputStream os = new FileOutputStream(outputFile);
+
         int submittedTasks = 0;
         for (Task t : jobConfig.tasks) {
-            File outputFile = new File(inDir, String.format("task-%s.xml", t.id));
-            Callable taskRunner = new TaskRunner(t, resolver, this.getLogger(), outputFile);
+            Callable taskRunner = new TaskRunner(t, resolver, this.getLogger(), os);
             jobExecutor.submit(taskRunner);
             submittedTasks++;
         }
@@ -305,10 +311,18 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             TaskRunner t = null;
             try {
                 f = jobExecutor.take();
-                t = f.get();
+//                this.getLogger().info("Getting task from " + f);
+                Object o = f.get();
+//                this.getLogger().info("Taskresult object=" + o);
+                String result = (String)o;//t.result;
+                os.write(result.getBytes());
+//                this.getLogger().info("Task returned " + result);
             } catch (ExecutionException eex) {
                 if (null != t) {
                     this.getLogger().info("Received ExecutionException for task " + t.task.id + ", ignoring, continuing with other tasks.");
+                }
+                else {
+                    this.getLogger().info("Received ExecutionException for task, ignoring, continuing with other tasks: ex = " + eex.getMessage());
                 }
             } catch (InterruptedException iex) {
                 this.getLogger().info("Received InterruptedException, quitting executing tasks.");
@@ -324,6 +338,9 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         if (interrupted) {
             threadPool.shutdownNow();
         }
+        os.close();
+        jobExecutor = null;
+        threadPool = null;
         this.manager.release(resolver);
     }
 
@@ -474,14 +491,19 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
      * @param manager Cocoon servicemanager (so cocoon: protocol is allowed.)
      * @param logger For logging stuff
      * @param os Where the output ends up.
+     * @return the output as a String object
      */
-    private static void processPipeline(String url, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os) throws IOException {
+    private static String processPipeline(String url, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os) throws IOException {
         Source src = null;
         InputStream is = null;
+        String result = null;
         try {
             src = resolver.resolveURI(url);
             is = src.getInputStream();
-            IOUtils.copy(is, os);
+            StringWriter writer = new StringWriter();
+            IOUtils.copy(is, writer, "UTF-8");
+            result = writer.toString();
+//            IOUtils.copy(is, os);
         } catch (IOException e) {
             throw new CascadingRuntimeException(String.format("Error processing pipeline \"%s\"", url), e);
         } finally {
@@ -500,6 +522,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                 }
             }
         }
+        return result;
     }
 
     /**
