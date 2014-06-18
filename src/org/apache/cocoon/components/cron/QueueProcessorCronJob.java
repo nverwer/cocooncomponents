@@ -122,8 +122,8 @@ import org.joda.time.DateTime;
  *   class="org.apache.cocoon.components.cron.CocoonQuartzJobScheduler"
  *   logger="cron" role="org.apache.cocoon.components.cron.JobScheduler">
  *   .....
- *   &lt;trigger name="dequeue-job"
- *       target="org.apache.cocoon.components.cron.CronJob/dequeue"
+ *   &lt;trigger name="queueprocessor-job"
+ *       target="org.apache.cocoon.components.cron.CronJob/queueprocessor"
  *       concurrent-runs="false">
  *       &lt;cron>0/10 * * * * ?&lt;/cron>
  *   &lt;/trigger>
@@ -133,7 +133,7 @@ import org.joda.time.DateTime;
  *
  * &lt;component class="org.apache.cocoon.components.cron.QueueProcessorCronJob"
     logger="cron.publish"
-    role="org.apache.cocoon.components.cron.CronJob/dequeue">
+    role="org.apache.cocoon.components.cron.CronJob/queueprocessor">
  *    &lt;queue-path>path-to-queue-directory-on-disk&lt;/queue-path>
  * &lt;/component>
  *
@@ -226,7 +226,6 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         public String call() throws Exception {
             
             String pipelineResult = null;
-//            this.logger.info("Processing task " + task.id + " called.");
             try {
                 pipelineResult = processPipeline(task.uri, resolver, logger, os);
             }
@@ -235,7 +234,6 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 throw ex;
             }
             result = String.format("TASK %s\nRESULT=%s\n\n", this.task.id, pipelineResult);
-//            this.logger.info("Processing task " + task.id + " result="+result);
             return result;
         }
     }
@@ -311,12 +309,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             TaskRunner t = null;
             try {
                 f = jobExecutor.take();
-//                this.getLogger().info("Getting task from " + f);
                 Object o = f.get();
-//                this.getLogger().info("Taskresult object=" + o);
-                String result = (String)o;//t.result;
+                String result = (String)o;
                 os.write(result.getBytes());
-//                this.getLogger().info("Task returned " + result);
             } catch (ExecutionException eex) {
                 if (null != t) {
                     this.getLogger().info("Received ExecutionException for task " + t.task.id + ", ignoring, continuing with other tasks.");
@@ -503,7 +498,6 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             StringWriter writer = new StringWriter();
             IOUtils.copy(is, writer, "UTF-8");
             result = writer.toString();
-//            IOUtils.copy(is, os);
         } catch (IOException e) {
             throw new CascadingRuntimeException(String.format("Error processing pipeline \"%s\"", url), e);
         } finally {
@@ -515,8 +509,6 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 throw new CascadingRuntimeException("QueueProcessorCronJob raised an exception closing input stream on " + url + ".", e);
             } finally {
                 if (null != src) {
-//                    logger.info(String.format("Releasing source: %s", src));
-
                     resolver.release(src);
                     src = null;
                 }
