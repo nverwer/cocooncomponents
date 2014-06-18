@@ -223,8 +223,15 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         public Object call() throws Exception {
 //            this.logger.info("Processing task " + task.id + " called.");
             OutputStream os = new FileOutputStream(outputFile);
-            processPipeline(task.uri, resolver, logger, os);
-            os.close();
+            try {
+                processPipeline(task.uri, resolver, logger, os);
+            }
+            catch (Exception ex) {
+                throw ex;
+            }
+            finally {
+                os.close();
+            }
             return null;
         }
     }
