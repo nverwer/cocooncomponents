@@ -77,19 +77,19 @@ import org.joda.time.DateTime;
  *
  * &lt;processor id="thread-id" started="dateTime"
  * tasks="nr of tasks" tasks-completed="nr of completed tasks" />
- *
- * This file can be read in order to get an idea of the progress of
- * the current job. It also indicates whether the current job is being processed
- * at all - if the modified timestamp of the file is older than, say, a minute,
- * it is assumed the Processor/job has failed. However, when more than one
- * DequeueCronJob is allowed to run at the same time, this can go wrong if a
- * task takes longer to complete than said minute. This is because the
- * processor-status.xml file is only updated after a task has completed
- * (successfully or not). It is therefore recommended to have the
- * concurrent-runs="false" attribute on a Trigger.
- *
- * When a Processor starts there are a few possible scenarios: 1 another job is
- * already being processed and that Processor is still alive -> quit. 2 there is
+
+ This file can be read in order to get an idea of the progress of
+ the current job. It also indicates whether the current job is being processed
+ at all - if the modified timestamp of the file is older than, say, a minute,
+ it is assumed the Processor/job has failed. However, when more than one
+ QueueProcessorCronJob is allowed to run at the same time, this can go wrong if a
+ task takes longer to complete than said minute. This is because the
+ processor-status.xml file is only updated after a task has completed
+ (successfully or not). It is therefore recommended to have the
+ concurrent-runs="false" attribute on a Trigger.
+
+ When a Processor starts there are a few possible scenarios: 1 another job is
+ already being processed and that Processor is still alive -> quit. 2 there is
  * no job to be processed -> quit. 3 there is no other Processor running but
  * there's a job already being processed -> move job to "error"-directory, quit.
  * 4 there is a job to be processed and no Processor active -> start processing
@@ -131,14 +131,14 @@ import org.joda.time.DateTime;
  *
  * and
  *
- * &lt;component class="org.apache.cocoon.components.cron.DequeueCronJob"
- *    logger="cron.publish"
- *    role="org.apache.cocoon.components.cron.CronJob/dequeue">
+ * &lt;component class="org.apache.cocoon.components.cron.QueueProcessorCronJob"
+    logger="cron.publish"
+    role="org.apache.cocoon.components.cron.CronJob/dequeue">
  *    &lt;queue-path>path-to-queue-directory-on-disk&lt;/queue-path>
  * &lt;/component>
  *
  */
-public class DequeueCronJob extends ServiceableCronJob implements Configurable, ConfigurableCronJob {
+public class QueueProcessorCronJob extends ServiceableCronJob implements Configurable, ConfigurableCronJob {
 
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
@@ -408,7 +408,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         try {
             FileUtils.writeStringToFile(pStatusFile, status, "UTF-8");
         } catch (IOException ex) {
-            Logger.getLogger(DequeueCronJob.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
         }
 
     }
@@ -512,7 +512,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
                     is.close();
                 }
             } catch (IOException e) {
-                throw new CascadingRuntimeException("DequeueCronJob raised an exception closing input stream on " + url + ".", e);
+                throw new CascadingRuntimeException("QueueProcessorCronJob raised an exception closing input stream on " + url + ".", e);
             } finally {
                 if (null != src) {
 //                    logger.info(String.format("Releasing source: %s", src));
@@ -542,7 +542,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
         File errorDir = getOrCreateDirectory(queueDir, errorDirName);
 
         // Get status of Processor
-        DequeueCronJob.ProcessorStatus pStatus = processorStatus();
+        QueueProcessorCronJob.ProcessorStatus pStatus = processorStatus();
 
         File currentJobFile = getOldestJobFile(processingDir);
 
@@ -554,7 +554,7 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
             /*
              * A job is processed by a live Processor -> quit now.
              */
-            if (pStatus.equals(DequeueCronJob.ProcessorStatus.ALIVE)) {
+            if (pStatus.equals(QueueProcessorCronJob.ProcessorStatus.ALIVE)) {
 
                 if (this.getLogger().isDebugEnabled()) {
                     this.getLogger().debug(String.format("Active job \"%s\" in queue \"%s\", stopping", currentJobFile, queueDir));
@@ -623,13 +623,13 @@ public class DequeueCronJob extends ServiceableCronJob implements Configurable, 
     private synchronized ProcessorStatus processorStatus() {
         File statusFile = new File(this.queuePath, PROCESSOR_STATUS_FILE);
         if (!statusFile.exists()) {
-            return DequeueCronJob.ProcessorStatus.NONE;
+            return QueueProcessorCronJob.ProcessorStatus.NONE;
         } else {
             long lastModified = statusFile.lastModified();
             if (System.currentTimeMillis() - lastModified > PROCESSOR_STATUS_FILE_STALE) {
-                return DequeueCronJob.ProcessorStatus.DEAD;
+                return QueueProcessorCronJob.ProcessorStatus.DEAD;
             } else {
-                return DequeueCronJob.ProcessorStatus.ALIVE;
+                return QueueProcessorCronJob.ProcessorStatus.ALIVE;
             }
         }
     }
