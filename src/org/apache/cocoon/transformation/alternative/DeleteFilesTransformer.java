@@ -4,7 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 
-import org.apache.avalon.excalibur.io.FileUtil;
+import org.apache.commons.io.FileUtils;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
@@ -76,8 +76,8 @@ public class DeleteFilesTransformer extends AbstractTransformer {
     if (file != null && file.exists()) {
       try {
         // Also deletes subdirs
-        FileUtil.forceDelete(file);
-      } catch (Exception ignore) {
+        FileUtils.forceDelete(file);
+      } catch (IOException ignore) {
         getLogger().error("Could not delete file: " + name, ignore);
       }
     }
