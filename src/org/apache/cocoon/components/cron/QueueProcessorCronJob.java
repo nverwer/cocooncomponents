@@ -1,6 +1,7 @@
 package org.apache.cocoon.components.cron;
 
 import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.XStreamException;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import java.io.File;
 import java.io.FileFilter;
@@ -361,7 +362,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param currentJob
      * @return JobConfig
      */
-    private JobConfig readJobConfig(File currentJob) {
+    private JobConfig readJobConfig(File currentJob) throws XStreamException {
 
         // <job name="test-job" created="20140613T11:45:00" max-concurrent="3">
         //   <tasks>
