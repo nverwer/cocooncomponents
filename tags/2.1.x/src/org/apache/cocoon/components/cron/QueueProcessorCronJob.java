@@ -2,6 +2,13 @@ package org.apache.cocoon.components.cron;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.XStreamException;
+import com.thoughtworks.xstream.converters.ConversionException;
+import com.thoughtworks.xstream.converters.Converter;
+import com.thoughtworks.xstream.converters.MarshallingContext;
+import com.thoughtworks.xstream.converters.UnmarshallingContext;
+import com.thoughtworks.xstream.converters.extended.ISO8601DateConverter;
+import com.thoughtworks.xstream.io.HierarchicalStreamReader;
+import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
 import com.thoughtworks.xstream.io.xml.DomDriver;
 import java.io.File;
 import java.io.FileFilter;
@@ -12,9 +19,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
+import java.text.DateFormat;
+import java.text.ParseException;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
@@ -36,6 +48,7 @@ import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.avalon.framework.service.ServiceException;
 import org.apache.cocoon.components.cron.ConfigurableCronJob;
 import org.apache.cocoon.components.cron.ServiceableCronJob;
+import org.apache.cocoon.environment.CocoonRunnable;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
@@ -48,7 +61,6 @@ import org.joda.time.DateTime;
 /**
  *
  * @author <a href="mailto:huib.verweij@koop.overheid.nl">Huib Verweij</a>
- * @author <a href="mailto:maarten.kroon@koop.overheid.nl">Maarten Kroon</a>
  *
  * Execute jobs that are submitted to a queue.
  *
@@ -131,8 +143,8 @@ import org.joda.time.DateTime;
  * and
  *
  * &lt;component class="org.apache.cocoon.components.cron.QueueProcessorCronJob"
-    logger="cron.publish"
-    role="org.apache.cocoon.components.cron.CronJob/queueprocessor">
+ logger="cron.publish"
+ role="org.apache.cocoon.components.cron.CronJob/queueprocessor">
  *    &lt;queue-path>path-to-queue-directory-on-disk&lt;/queue-path>
  * &lt;/component>
  *
@@ -141,8 +153,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
-    private static final long   PROCESSOR_STATUS_FILE_STALE = 60000;
-    private static final long   TASK_TIMEOUT = 50000;
+    private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
+    private static final long TASK_TIMEOUT = 50000;
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
@@ -150,6 +162,15 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     private static final String errorDirName = "error";
 
     private File queuePath;
+
+    /**
+     * An enum denoting the status of a Processor this class).
+     */
+    public enum ProcessorStatus {
+
+        ALIVE, DEAD, NONE
+
+    }
 
     /**
      * Copy job file to outDir, also, zip contents of processingDir into
@@ -204,14 +225,14 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         } catch (IOException ioe) {
             this.getLogger().info("Error creating zip file" + ioe);
         }
-        
+
         this.getLogger().info("Done finishing up job, created Zip file.");
     }
 
     /**
      * The object that runs a task.
      */
-    private static class TaskRunner implements Callable {
+    private static class CocoonTaskRunner extends CocoonRunnable {
 
         private final Task task;
         private final SourceResolver resolver;
@@ -220,7 +241,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         private final int sequenceNumber;
         String result;
 
-        public TaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os, int sequenceNumber) {
+        public CocoonTaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os, int sequenceNumber) {
             this.task = t;
             this.resolver = resolver;
             this.logger = logger;
@@ -228,40 +249,40 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             this.sequenceNumber = sequenceNumber;
         }
 
+//        @Override
         @Override
-        public String call() throws Exception {
+        public void doRun() {
 
-            String baseMsg = String.format("\nTASK %s (%s)", this.sequenceNumber, this.task.uri);            
+            String baseMsg = String.format("\nTASK %s (%s)", this.sequenceNumber, this.task.uri);
             String pipelineResult = null;
-            
+            String result;
+
             try {
                 pipelineResult = processPipeline(task.uri, resolver, logger, os);
-            }
-            catch (Exception ex) {
+            } catch (Exception ex) {
                 logger.info("Exception for task " + task.uri);
                 pipelineResult = String.format("ERROR %s", ex.getMessage());
-                
+
                 result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
-                synchronized(os) {
-                    os.write(result.getBytes());
+                synchronized (os) {
+                    try {
+                        os.write(result.getBytes());
+                    } catch (IOException ex1) {
+                        Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex1);
+                    }
                 }
-                throw ex;
             }
-            
+
             result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
-            synchronized(os) {
-                os.write(result.getBytes());
+            synchronized (os) {
+                try {
+                    os.write(result.getBytes());
+                } catch (IOException ex) {
+                    Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
+                }
             }
-            return result;
+            return;
         }
-    }
-
-    /**
-     * An enum denoting the status of a Processor this class).
-     */
-    public enum ProcessorStatus {
-
-        ALIVE, DEAD, NONE
 
     }
 
@@ -273,7 +294,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param inDir Where all output files are stored.
      * @param currentJob The current job file.
      */
-    private void processCurrentJob(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException {
+    private void processCurrentJobConcurrently(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException {
         this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
 
         this.getLogger().info("Reading job file.");
@@ -307,7 +328,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
         this.getLogger().info("Using " + maxThreads + " threads to execute " + totalTasks + " tasks.");
 
-        CompletionService<TaskRunner> jobExecutor = new ExecutorCompletionService<TaskRunner>(threadPool);
+        CompletionService<CocoonTaskRunner> jobExecutor = new ExecutorCompletionService<CocoonTaskRunner>(threadPool);
         SourceResolver resolver = (SourceResolver) this.manager.lookup(SourceResolver.ROLE);
 
         File outputFile = new File(inDir, "task-results.txt");
@@ -315,8 +336,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
         int submittedTasks = 0;
         for (Task t : jobConfig.tasks) {
-            Callable taskRunner = new TaskRunner(t, resolver, this.getLogger(), os, ++submittedTasks);
-            jobExecutor.submit(taskRunner);
+            CocoonTaskRunner taskRunner = new CocoonTaskRunner(t, resolver, this.getLogger(), os, ++submittedTasks);
+            jobExecutor.submit(taskRunner, taskRunner);
         }
         this.getLogger().info("Submitted " + submittedTasks + " tasks.");
 
@@ -324,15 +345,14 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
         threadPool.shutdown();
         while (!threadPool.isTerminated() && !interrupted) {
-            Future<TaskRunner> f = null;
+            Future<CocoonTaskRunner> f = null;
             try {
                 this.getLogger().info("Retrieving next finished task.");
                 f = jobExecutor.poll(TASK_TIMEOUT, TimeUnit.MILLISECONDS);
                 if (null == f) {
                     this.getLogger().info("Failed getting next finished task (TASK_TIMEOUT), quitting.");
                     interrupted = true;
-                }
-                else {
+                } else {
                     this.getLogger().info("Got finished task.");
                     Object o = f.get();
                 }
@@ -346,7 +366,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 this.getLogger().info("Received CascadingRuntimeException, ignoring, continuing with other tasks.");
             }
             completedTasks++;
-            this.getLogger().info("Tasks completed: " + completedTasks + "/" +  totalTasks);
+            this.getLogger().info("Tasks completed: " + completedTasks + "/" + totalTasks);
             writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
         }
         if (interrupted) {
@@ -354,145 +374,6 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         }
         os.close();
         this.manager.release(resolver);
-    }
-
-    /**
-     * Read job description file into JobConfig object using XStream.
-     *
-     * @param currentJob
-     * @return JobConfig
-     */
-    private JobConfig readJobConfig(File currentJob) throws XStreamException {
-
-        // <job name="test-job" created="20140613T11:45:00" max-concurrent="3">
-        //   <tasks>
-        //      <task id="task-1">
-        //            <uri>http://localhost:8888/koop/front/queue-test?id=1</uri>
-        //      </task>
-        //      ...
-        // </job>
-        XStream xstream = new XStream(new DomDriver());
-        xstream.alias("job", JobConfig.class);
-        xstream.useAttributeFor(JobConfig.class, "name");
-        xstream.useAttributeFor(JobConfig.class, "created");
-        xstream.useAttributeFor(JobConfig.class, "maxConcurrent");
-        xstream.aliasField("max-concurrent", JobConfig.class, "maxConcurrent");
-
-        xstream.alias("task", Task.class);
-        xstream.useAttributeFor(Task.class, "id");
-
-        JobConfig jobConfig = (JobConfig) xstream.fromXML(currentJob);
-
-        return jobConfig;
-    }
-
-    @SuppressWarnings("rawtypes")
-    @Override
-    public void setup(Parameters params, Map objects) {
-        return;
-    }
-
-    /**
-     * We're done, delete status file.
-     */
-    private synchronized void deleteProcessorStatus() {
-        File pStatusFile = new File(this.queuePath, PROCESSOR_STATUS_FILE);
-        pStatusFile.delete();
-    }
-
-    /**
-     * Update status file.
-     *
-     * @param jobName
-     * @param started
-     * @param totalTasks
-     * @param completedTasks
-     * @param currentTaskStartedAt
-     */
-    private synchronized void writeProcessorStatus(String jobName, DateTime started, int totalTasks, int completedTasks) {
-        File pStatusFile = new File(this.queuePath, PROCESSOR_STATUS_FILE);
-        String status = String.format("<processor id=\"%s\" job-name=\"%s\" started=\"%s\" tasks=\"%d\" tasks-completed=\"%d\"/>",
-                Thread.currentThread().getId(),
-                jobName,
-                started.toString(),
-                totalTasks,
-                completedTasks);
-        try {
-            FileUtils.writeStringToFile(pStatusFile, status, "UTF-8");
-        } catch (IOException ex) {
-            Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
-        }
-
-    }
-
-    /**
-     * Return File object for parent/path, creating it if necessary.
-     *
-     * @param parent
-     * @param path
-     * @return Resulting File object.
-     */
-    private File getOrCreateDirectory(File parent, String path) {
-        File dir = new File(parent, path);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-        return dir;
-    }
-
-    /**
-     * Move file from one File object to another File object, deleting an
-     * already existing file if necessary.
-     *
-     * @param fromFile
-     * @param toFile
-     * @throws IOException
-     */
-    private void moveFileTo(File fromFile, File toFile) throws IOException {
-        if (toFile.isFile()) {
-            FileUtils.forceDelete(toFile);
-        }
-        if (!fromFile.renameTo(toFile)) {
-            if (this.getLogger().isErrorEnabled()) {
-                this.getLogger().error(String.format("Could not move file \"%s\" to \"%s\"", fromFile.getAbsolutePath(), toFile.getAbsoluteFile()));
-            }
-        }
-    }
-
-    /**
-     * Get oldest job (file named "job-*.xml") in dir, using lastModified
-     * timestamp and picking first File if there is more than one file with the
-     * same lastModified.
-     *
-     * @param dir
-     * @return
-     */
-    protected File getOldestJobFile(File dir) {
-        if (dir == null || !dir.isDirectory()) {
-            return null;
-        }
-        File[] files = dir.listFiles((FileFilter) new WildcardFileFilter("job-*.xml"));
-        if (files.length == 0) {
-            return null;
-        }
-        Arrays.sort(files, new Comparator<File>() {
-            public int compare(File file1, File file2) {
-                return Long.valueOf(file1.lastModified()).compareTo(file2.lastModified());
-            }
-        });
-        return files[0];
-    }
-
-    /**
-     * Get path to queue folder.
-     *
-     * @param config
-     * @throws ConfigurationException
-     */
-    @Override
-    public void configure(final Configuration config) throws ConfigurationException {
-        String actualQueuesDirName = config.getChild(PARAMETER_QUEUE_PATH).getValue();
-        queuePath = new File(actualQueuesDirName);
     }
 
     /**
@@ -596,7 +477,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
                     this.getLogger().debug(String.format("Moved job \"%s\" to \"%s\"", jobFile, currentJob));
 
-                    processCurrentJob(processingDir, currentJob);
+                    processCurrentJobConcurrently(processingDir, currentJob);
 
                     finishUpJob(processingDir, outDir, currentJob);
 
@@ -620,6 +501,56 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     }
 
     /**
+     * Main entrypoint for CronJob.
+     *
+     * @param name
+     */
+    @Override
+    public void execute(String name) {
+        if (this.getLogger().isDebugEnabled()) {
+            this.getLogger().debug("CronJob " + name + " launched at " + new Date());
+        }
+        try {
+            processQueue();
+        } catch (IOException e) {
+            throw new CascadingRuntimeException("CronJob " + name + " raised an exception.", e);
+        }
+    }
+
+    @SuppressWarnings("rawtypes")
+    @Override
+    public void setup(Parameters params, Map objects) {
+        return;
+    }
+
+    /**
+     * Get path to queue folder.
+     *
+     * @param config
+     * @throws ConfigurationException
+     */
+    @Override
+    public void configure(final Configuration config) throws ConfigurationException {
+        String actualQueuesDirName = config.getChild(PARAMETER_QUEUE_PATH).getValue();
+        queuePath = new File(actualQueuesDirName);
+    }
+
+    /**
+     * Read job description file into JobConfig object using XStream.
+     *
+     * @param currentJob
+     * @return JobConfig
+     */
+    private JobConfig readJobConfig(File currentJob) throws XStreamException {
+
+        XStream xstream = getXStreamJobConfig();
+
+        JobConfig jobConfig = (JobConfig) xstream.fromXML(currentJob);
+
+        return jobConfig;
+    }
+
+    /**
      * Return NONE (No processor), ALIVE (Processor still active) or DEAD
      * (Processor hasn't updated status file for too long).
      *
@@ -640,26 +571,100 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     }
 
     /**
-     * Main entrypoint for CronJob.
-     *
-     * @param name
+     * We're done, delete status file.
      */
-    @Override
-    public void execute(String name) {
-        if (this.getLogger().isDebugEnabled()) {
-            this.getLogger().debug("CronJob " + name + " launched at " + new Date());
-        }
+    private synchronized void deleteProcessorStatus() {
+        File pStatusFile = new File(this.queuePath, PROCESSOR_STATUS_FILE);
+        pStatusFile.delete();
+    }
+
+    /**
+     * Update status file.
+     *
+     * @param jobName
+     * @param started
+     * @param totalTasks
+     * @param completedTasks
+     * @param currentTaskStartedAt
+     */
+    private synchronized void writeProcessorStatus(String jobName, DateTime started, int totalTasks, int completedTasks) {
+        File pStatusFile = new File(this.queuePath, PROCESSOR_STATUS_FILE);
+        String status = String.format("<processor id=\"%s\" job-name=\"%s\" started=\"%s\" tasks=\"%d\" tasks-completed=\"%d\"/>",
+                Thread.currentThread().getId(),
+                jobName,
+                started.toString(),
+                totalTasks,
+                completedTasks);
         try {
-            processQueue();
-        } catch (IOException e) {
-            throw new CascadingRuntimeException("CronJob " + name + " raised an exception.", e);
+            FileUtils.writeStringToFile(pStatusFile, status, "UTF-8");
+        } catch (IOException ex) {
+            Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
         }
+
+    }
+
+    /**
+     * Return File object for parent/path, creating it if necessary.
+     *
+     * @param parent
+     * @param path
+     * @return Resulting File object.
+     */
+    private File getOrCreateDirectory(File parent, String path) {
+        File dir = new File(parent, path);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
+        return dir;
+    }
+
+    /**
+     * Move file from one File object to another File object, deleting an
+     * already existing file if necessary.
+     *
+     * @param fromFile
+     * @param toFile
+     * @throws IOException
+     */
+    private void moveFileTo(File fromFile, File toFile) throws IOException {
+        if (toFile.isFile()) {
+            FileUtils.forceDelete(toFile);
+        }
+        if (!fromFile.renameTo(toFile)) {
+            if (this.getLogger().isErrorEnabled()) {
+                this.getLogger().error(String.format("Could not move file \"%s\" to \"%s\"", fromFile.getAbsolutePath(), toFile.getAbsoluteFile()));
+            }
+        }
+    }
+
+    /**
+     * Get oldest job (file named "job-*.xml") in dir, using lastModified
+     * timestamp and picking first File if there is more than one file with the
+     * same lastModified.
+     *
+     * @param dir
+     * @return
+     */
+    protected File getOldestJobFile(File dir) {
+        if (dir == null || !dir.isDirectory()) {
+            return null;
+        }
+        File[] files = dir.listFiles((FileFilter) new WildcardFileFilter("job-*.xml"));
+        if (files.length == 0) {
+            return null;
+        }
+        Arrays.sort(files, new Comparator<File>() {
+            public int compare(File file1, File file2) {
+                return Long.valueOf(file1.lastModified()).compareTo(file2.lastModified());
+            }
+        });
+        return files[0];
     }
 
     /**
      * Classes used by XStream for loading the job-*.xml config files into.
      */
-    private class Task {
+    public static class Task {
 
         /*
          <task id="task-*">
@@ -667,25 +672,78 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
          "http://localhost:8888/import/bwbng"</uri>
          </task>
          */
-        private String id;
-        private String uri;
+        public String id;
+        public String uri;
 
         public Task() {
         }
     }
 
-    private class JobConfig {
+    public static class JobConfig {
 
-        // <job id="71qyqha7a-91ajauq" name="job-name" description="task"
-        //      created="date" max-concurrent="n">tasks...</job>
-        private String id;
-        private String name;
-        private String description;
-        private DateTime created;
-        private Integer maxConcurrent;
-        private Task[] tasks;
+        // <job id="id" name="job name" description="job description"
+        //      created="datetime" max-concurrent="n">tasks...</job>
+        public String id;
+        public String name;
+        public String description;
+        public Date created;
+        public Integer maxConcurrent;
+        public Task[] tasks;
 
         public JobConfig() {
+        }
+    }
+
+    /**
+     * Set some XStream options to configure serialization.
+     * @return The configured XStream object.
+     */
+    public static XStream getXStreamJobConfig() {
+
+        // <job id="..." name="test-job" created="20140613T11:45:00" max-concurrent="3" description="...">
+        //   <tasks>
+        //      <task id="task-1">
+        //            <uri>http://localhost:8888/koop/front/queue-test?id=1</uri>
+        //      </task>
+        //      ...
+        // </job>
+        XStream xstream = new XStream(new DomDriver());
+
+//        ISO8601DateConverter
+        xstream.registerConverter(new ISO8601DateConverter());
+
+        xstream.alias("job", JobConfig.class);
+        xstream.useAttributeFor(JobConfig.class, "id");
+        xstream.useAttributeFor(JobConfig.class, "name");
+        xstream.useAttributeFor(JobConfig.class, "description");
+        xstream.useAttributeFor(JobConfig.class, "created");
+        xstream.useAttributeFor(JobConfig.class, "maxConcurrent");
+        xstream.aliasField("max-concurrent", JobConfig.class, "maxConcurrent");
+
+        xstream.alias("task", Task.class);
+        xstream.useAttributeFor(Task.class, "id");
+
+        return xstream;
+    }
+
+    public static class JodaTimeConverter implements Converter {
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public boolean canConvert(final Class type) {
+            return DateTime.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public void marshal(Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
+            writer.setValue(source.toString());
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Object unmarshal(HierarchicalStreamReader reader,
+                UnmarshallingContext context) {
+            return new DateTime(reader.getValue());
         }
     }
 }
