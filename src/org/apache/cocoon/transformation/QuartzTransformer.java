@@ -36,17 +36,22 @@ import org.xml.sax.SAXException;
 
 /**
  * This transformer can list Quartz Cronjobs and add new cronjobs or delete them.
- *
+ * Any cronjob can be deleted. Added cronjobs create a new Queue job with just
+ * one task using the job-uri attribute and the job-name and job-description
+ * attributes. See org.apache.cocoon.components.cron.QueueAddJob and 
+ * org.apache.cocoon.components.cron.QueueProcessorCronjob.
+ * 
  * This transformer triggers for element in the namespace "http://apache.org/cocoon/quartz/1.0".
  * 
- 
  * Example XML input:
  * <pre>
  *   <quartz:list/>
- *   <quartz:add name="MyJob" uri="/myapp/myjob?query-param=value" cron="0 &#42;/2 * * *" />
- *      The uri attribute DOES NOT specify protocol, host and port name. The
- *      protocol is always "http" and the host and port are determined at
- *      runtime.
+ *   <quartz:add name="MyJob" cron="0 &#42;/2 * * *"
+ *               job-uri="/myapp/myjob?query-param=value"
+ *               job-name="myjob"
+ *               job-description="Do some stuff later on using the QueueProcessor"/>
+ *      The @job-uri specifies the URI that should be resolved by the 
+ *      Job called @job-name having description @job-description.
  *   <quartz:delete name="MyJob" />
  * </pre>
  * 
@@ -61,7 +66,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
     private static final String ADD_ELEMENT = "add";
     private static final String DELETE_ELEMENT = "delete";
     private static final String NAME_ATTR = "name";
-    private static final String URI_ATTR = "uri";
+    private static final String JOBURI_ATTR = "job-uri";
     private static final String JOBNAME_ATTR = "job-name";
     private static final String JOBDESCRIPTION_ATTR = "job-description";
     private static final String CRON_ATTR = "cron";
@@ -96,9 +101,9 @@ public class QuartzTransformer extends AbstractSAXTransformer {
         if (name.equals(LIST_ELEMENT)) {
         }
         if (name.equals(ADD_ELEMENT)) {
-            this.uri = getAttribute(attr, URI_ATTR, null);
+            this.uri = getAttribute(attr, JOBURI_ATTR, null);
             if (this.uri == null) {
-                throw new ProcessingException("The " + URI_ATTR + " attribute is mandatory for " + ADD_ELEMENT + " elements.");
+                throw new ProcessingException("The " + JOBURI_ATTR + " attribute is mandatory for " + ADD_ELEMENT + " elements.");
             }
             this.name = getAttribute(attr, NAME_ATTR, null);
             if (this.name == null) {
@@ -164,7 +169,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
                 lookup(CocoonQuartzJobScheduler.ROLE);
 
         Parameters parameters = new Parameters();
-        parameters.setParameter(URI_ATTR, uri);
+        parameters.setParameter(JOBURI_ATTR, uri);
         parameters.setParameter(JOBNAME_ATTR, this.jobName);
         parameters.setParameter(JOBDESCRIPTION_ATTR, this.jobDescription);
         try {

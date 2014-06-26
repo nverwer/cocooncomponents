@@ -33,7 +33,7 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
 
     public static final String ROLE = "org.apache.cocoon.components.cron.CronJob/queueadd";
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
-    private static final String URI_PARAMETER = "uri";
+    private static final String JOBURI_PARAMETER = "job-uri";
     private static final String JOBNAME_PARAMETER = "job-name";
     private static final String JOBDESCRIPTION_PARAMETER = "job-description";
 
@@ -50,14 +50,14 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
     @Override
     public void setup(Parameters params, Map objects) {
         try {
-            this.uri = params.getParameter(URI_PARAMETER);
+            this.uri = params.getParameter(JOBURI_PARAMETER);
             this.jobName = params.getParameter(JOBNAME_PARAMETER, "Auto-generated job");
             this.jobDescription = params.getParameter(JOBDESCRIPTION_PARAMETER,
-                    "Automatisch toegevoegd vanuit QueueAddJob.");
+                    "Automatically added by QueueAddJob.");
             
 
         if (this.getLogger().isInfoEnabled()) {
-            this.getLogger().info(String.format("uri = %s", uri));
+            this.getLogger().info(String.format("job-uri = %s", uri));
             this.getLogger().info(String.format("job-name = %s", jobName));
             this.getLogger().info(String.format("job-description = %s", jobDescription));
         }
