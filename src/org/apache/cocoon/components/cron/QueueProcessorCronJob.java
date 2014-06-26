@@ -2,7 +2,6 @@ package org.apache.cocoon.components.cron;
 
 import com.thoughtworks.xstream.XStream;
 import com.thoughtworks.xstream.XStreamException;
-import com.thoughtworks.xstream.converters.ConversionException;
 import com.thoughtworks.xstream.converters.Converter;
 import com.thoughtworks.xstream.converters.MarshallingContext;
 import com.thoughtworks.xstream.converters.UnmarshallingContext;
@@ -19,16 +18,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
-import java.text.DateFormat;
-import java.text.ParseException;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -188,7 +181,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         File zipFile = new File(outDir, zipFileName);
         final String zipFolder = basename + "/";
 
-        this.getLogger().info("Finishing up job, creating Zip file.");
+        if (this.getLogger().isDebugEnabled()) {
+            this.getLogger().debug("Finishing up job, creating Zip file.");
+        }
 
         FileUtils.copyFileToDirectory(currentJob, outDir);
 
@@ -223,10 +218,12 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             zos.close();
 
         } catch (IOException ioe) {
-            this.getLogger().info("Error creating zip file" + ioe);
+            this.getLogger().error("Error creating zip file" + ioe);
         }
 
-        this.getLogger().info("Done finishing up job, created Zip file.");
+        if (this.getLogger().isDebugEnabled()) {
+            this.getLogger().debug("Created Zip file.");
+        }
     }
 
     /**
@@ -295,11 +292,17 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param currentJob The current job file.
      */
     private void processCurrentJobConcurrently(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException {
-        this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
+        if (this.getLogger().isInfoEnabled()) {
+            this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
+        }
 
-        this.getLogger().info("Reading job file.");
+        if (this.getLogger().isDebugEnabled()) {
+            this.getLogger().debug("Reading job file.");
+        }
         JobConfig jobConfig = readJobConfig(currentJob);
-        this.getLogger().info("Job file read.");
+        if (this.getLogger().isDebugEnabled()) {
+            this.getLogger().debug("Job file read.");
+        }
 
         int totalTasks = jobConfig.tasks.length;
         int completedTasks = 0;
@@ -326,7 +329,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             }
         }
         ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
-        this.getLogger().info("Using " + maxThreads + " threads to execute " + totalTasks + " tasks.");
+        if (this.getLogger().isInfoEnabled()) {
+            this.getLogger().info("Using " + maxThreads + " threads to execute " + totalTasks + " tasks.");
+        }
 
         CompletionService<CocoonTaskRunner> jobExecutor = new ExecutorCompletionService<CocoonTaskRunner>(threadPool);
         SourceResolver resolver = (SourceResolver) this.manager.lookup(SourceResolver.ROLE);
@@ -339,34 +344,41 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             CocoonTaskRunner taskRunner = new CocoonTaskRunner(t, resolver, this.getLogger(), os, ++submittedTasks);
             jobExecutor.submit(taskRunner, taskRunner);
         }
-        this.getLogger().info("Submitted " + submittedTasks + " tasks.");
-
+        if (this.getLogger().isDebugEnabled()) {
+            this.getLogger().debug("Submitted " + submittedTasks + " tasks.");
+        }
         boolean interrupted = false;
 
         threadPool.shutdown();
         while (!threadPool.isTerminated() && !interrupted) {
             Future<CocoonTaskRunner> f = null;
             try {
-                this.getLogger().info("Retrieving next finished task.");
+                if (this.getLogger().isDebugEnabled()) {
+                    this.getLogger().debug("Retrieving next finished task.");
+                }
                 f = jobExecutor.poll(TASK_TIMEOUT, TimeUnit.MILLISECONDS);
                 if (null == f) {
-                    this.getLogger().info("Failed getting next finished task (TASK_TIMEOUT), quitting.");
+                    this.getLogger().error("Failed getting next finished task (TASK_TIMEOUT), quitting.");
                     interrupted = true;
                 } else {
-                    this.getLogger().info("Got finished task.");
+                    if (this.getLogger().isDebugEnabled()) {
+                        this.getLogger().debug("Got finished task.");
+                    }
                     Object o = f.get();
                 }
             } catch (ExecutionException eex) {
-                this.getLogger().info("Received ExecutionException for task, ignoring, continuing with other tasks: ex = " + eex.getMessage());
+                this.getLogger().error("Received ExecutionException for task, ignoring, continuing with other tasks: ex = " + eex.getMessage());
             } catch (InterruptedException iex) {
-                this.getLogger().info("Received InterruptedException, quitting executing tasks.");
+                this.getLogger().error("Received InterruptedException, quitting executing tasks.");
                 interrupted = true;
                 break;
             } catch (CascadingRuntimeException ex) {
-                this.getLogger().info("Received CascadingRuntimeException, ignoring, continuing with other tasks.");
+                this.getLogger().error("Received CascadingRuntimeException, ignoring, continuing with other tasks.");
             }
             completedTasks++;
-            this.getLogger().info("Tasks completed: " + completedTasks + "/" + totalTasks);
+            if (this.getLogger().isInfoEnabled()) {
+                this.getLogger().info("Tasks completed: " + completedTasks + "/" + totalTasks);
+            }
             writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
         }
         if (interrupted) {
@@ -432,8 +444,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
         File currentJobFile = getOldestJobFile(processingDir);
 
-        this.getLogger().info(String.format("Processor: %s, queueDir=%s, current job: %s", pStatus, queueDir, currentJobFile));
-
+        if (this.getLogger().isDebugEnabled()) {
+            this.getLogger().debug(String.format("Processor: %s, queueDir=%s, current job: %s", pStatus, queueDir, currentJobFile));
+        }
         // A job is already being processed
         if (null != currentJobFile) {
 
@@ -475,16 +488,16 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
                     moveFileTo(jobFile, currentJob);
 
-                    this.getLogger().debug(String.format("Moved job \"%s\" to \"%s\"", jobFile, currentJob));
+                    if (this.getLogger().isDebugEnabled()) {
+                        this.getLogger().debug(String.format("Moved job \"%s\" to \"%s\"", jobFile, currentJob));
+                    }
 
                     processCurrentJobConcurrently(processingDir, currentJob);
 
                     finishUpJob(processingDir, outDir, currentJob);
 
                 } catch (Exception e) { // Catch IOException AND catch ClassCast exception etc.
-                    if (this.getLogger().isErrorEnabled()) {
-                        this.getLogger().error("Error processing job \"" + jobFileName + "\"", e);
-                    }
+                    this.getLogger().error("Error processing job \"" + jobFileName + "\"", e);
                     moveFileTo(currentJob, new File(errorDir, jobFileName));
                     String stackTrace = ExceptionUtils.getFullStackTrace(e);
                     FileUtils.writeStringToFile(new File(errorDir, FilenameUtils.removeExtension(jobFileName) + ".txt"), stackTrace, "UTF-8");
@@ -631,9 +644,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             FileUtils.forceDelete(toFile);
         }
         if (!fromFile.renameTo(toFile)) {
-            if (this.getLogger().isErrorEnabled()) {
-                this.getLogger().error(String.format("Could not move file \"%s\" to \"%s\"", fromFile.getAbsolutePath(), toFile.getAbsoluteFile()));
-            }
+            this.getLogger().error(String.format("Could not move file \"%s\" to \"%s\"", fromFile.getAbsolutePath(), toFile.getAbsoluteFile()));
         }
     }
 

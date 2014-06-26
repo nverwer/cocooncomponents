@@ -57,15 +57,14 @@ public class QuartzTransformer extends AbstractSAXTransformer {
 
     public static final String QUARTZ_NAMESPACE_URI = "http://apache.org/cocoon/quartz/1.0";
     private static final String QUARTZ_PREFIX = "cron";
-//    public static final String HTTP_NAMESPACE_URI = "http://www.w3.org/2006/http#";
     private static final String LIST_ELEMENT = "list";
+    private static final String ADD_ELEMENT = "add";
+    private static final String DELETE_ELEMENT = "delete";
     private static final String NAME_ATTR = "name";
     private static final String URI_ATTR = "uri";
     private static final String JOBNAME_ATTR = "job-name";
     private static final String JOBDESCRIPTION_ATTR = "job-description";
     private static final String CRON_ATTR = "cron";
-    private static final String ADD_ELEMENT = "add";
-    private static final String DELETE_ELEMENT = "delete";
 
     private static final String JOBS_ELEMENT = "jobs";
     private static final String JOB_ELEMENT = "job";
@@ -73,19 +72,11 @@ public class QuartzTransformer extends AbstractSAXTransformer {
     private static final String NEXTTIME_ATTR = "next-time";
     private static final String ISRUNNING_ATTR = "is-running";
 
-    
-    private static final String COCOON_URI = "cocoon:";
-    
     private String uri;
     private String name;
     private String cron;
     private String jobName;
     private String jobDescription;
-    private String parameterName;
-    private String parse;
-    private boolean showErrors;
-    private Map httpHeaders;
-    private SourceParameters requestParameters;
 
     public QuartzTransformer() {
         this.defaultNamespaceURI = QUARTZ_NAMESPACE_URI;
@@ -120,6 +111,12 @@ public class QuartzTransformer extends AbstractSAXTransformer {
             this.jobName = getAttribute(attr, JOBNAME_ATTR, null);
             this.jobDescription = getAttribute(attr, JOBDESCRIPTION_ATTR, null);
         }
+        if (name.equals(DELETE_ELEMENT)) {
+            this.name = getAttribute(attr, NAME_ATTR, null);
+            if (this.name == null) {
+                throw new ProcessingException("The " + NAME_ATTR + " attribute is mandatory for " + DELETE_ELEMENT + " elements.");
+            }
+        }
     }
 
     public void endTransformingElement(String uri, String name, String raw)
@@ -140,9 +137,15 @@ public class QuartzTransformer extends AbstractSAXTransformer {
                 Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+        if (name.equals(DELETE_ELEMENT)) {
+            try {
+                deleteCronJob(this.name);
+            } catch (ServiceException ex) {
+                Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
     }
 
-    
     /**
      * Add a cron job to add a job to the QueueProcessorCronJob's queue.
      * @param uri The URI to call, must start with cocoon:.
@@ -156,18 +159,20 @@ public class QuartzTransformer extends AbstractSAXTransformer {
      */
     private void addCronJob(String uri, String name, String cron)
             throws ProcessingException, IOException, SAXException, ParseException, ServiceException {
-//        if (!(uri.startsWith(COCOON_URI))) {
-//            throw new ProcessingException("URI must start use cocoon: protocol.");
-//        }
-        
+
         CocoonQuartzJobScheduler cqjs = (CocoonQuartzJobScheduler) this.manager.
                 lookup(CocoonQuartzJobScheduler.ROLE);
-        
+
         Parameters parameters = new Parameters();
         parameters.setParameter(URI_ATTR, uri);
         parameters.setParameter(JOBNAME_ATTR, this.jobName);
         parameters.setParameter(JOBDESCRIPTION_ATTR, this.jobDescription);
         try {
+
+            if (this.getLogger().isInfoEnabled()) {
+                this.getLogger().info("Add cronjob: job = " + name);
+            }
+
             cqjs.addJob(name, QueueAddJob.ROLE, cron, false, parameters, null);
         } catch (CascadingException ex) {
             Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
@@ -175,17 +180,18 @@ public class QuartzTransformer extends AbstractSAXTransformer {
     }
 
     private void listCronJobs() throws ServiceException, SAXException {
+
         CocoonQuartzJobScheduler cqjs = (CocoonQuartzJobScheduler) this.manager.
                 lookup(CocoonQuartzJobScheduler.ROLE);
-//        if (this.getLogger().isDebugEnabled()) {
-        this.getLogger().info("org.apache.cocoon.components.cron.CocoonQuartzJobScheduler = " + cqjs);
-//        }
         String[] jobs = cqjs.getJobNames();
         xmlConsumer.startElement(QUARTZ_NAMESPACE_URI, JOBS_ELEMENT,
                 String.format("%s:%s", QUARTZ_PREFIX, JOBS_ELEMENT),
                 EMPTY_ATTRIBUTES);
         for (String job : jobs) {
-            this.getLogger().info("job = " + job);
+
+            if (this.getLogger().isInfoEnabled()) {
+                this.getLogger().info("List cronjobs: job = " + job);
+            }
 
             JobSchedulerEntry entry = cqjs.getJobSchedulerEntry(job);
 
@@ -204,6 +210,17 @@ public class QuartzTransformer extends AbstractSAXTransformer {
         }
         xmlConsumer.endElement(QUARTZ_NAMESPACE_URI, JOBS_ELEMENT,
                 String.format("%s:%s", QUARTZ_PREFIX, JOBS_ELEMENT));
+    }
+
+    private void deleteCronJob(String name) throws ServiceException {
+
+        CocoonQuartzJobScheduler cqjs = (CocoonQuartzJobScheduler) this.manager.
+                lookup(CocoonQuartzJobScheduler.ROLE);
+
+        if (this.getLogger().isInfoEnabled()) {
+            this.getLogger().info("Delete cronjob: job = " + name);
+        }
+        cqjs.removeJob(name);
     }
 
 }

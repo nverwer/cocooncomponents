@@ -55,9 +55,12 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
             this.jobDescription = params.getParameter(JOBDESCRIPTION_PARAMETER,
                     "Automatisch toegevoegd vanuit QueueAddJob.");
             
+
+        if (this.getLogger().isInfoEnabled()) {
             this.getLogger().info(String.format("uri = %s", uri));
             this.getLogger().info(String.format("job-name = %s", jobName));
             this.getLogger().info(String.format("job-description = %s", jobDescription));
+        }
         
         } catch (ParameterException ex) {
             Logger.getLogger(QueueAddJob.class.getName()).log(Level.SEVERE, null, ex);
@@ -123,7 +126,9 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
         
         File currentJobFile = new File(inDir, String.format("job-%s.xml", jobID));
 
-        this.getLogger().info(String.format("New job: %s", currentJobFile.getAbsolutePath()));
+        if (this.getLogger().isInfoEnabled()) {
+            this.getLogger().info(String.format("New job: %s", currentJobFile.getAbsolutePath()));
+        }
         
         XStream xstream = getXStreamJobConfig();
         
