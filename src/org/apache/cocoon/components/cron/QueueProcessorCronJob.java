@@ -252,12 +252,11 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
             String baseMsg = String.format("\nTASK %s (%s)", this.sequenceNumber, this.task.uri);
             String pipelineResult = null;
-            String result;
 
             try {
                 pipelineResult = processPipeline(task.uri, resolver, logger, os);
             } catch (Exception ex) {
-                logger.info("Exception for task " + task.uri);
+                logger.info("Exception for task " + task.uri + " : " + (ex.getMessage()));
                 pipelineResult = String.format("ERROR %s", ex.getMessage());
 
                 result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
