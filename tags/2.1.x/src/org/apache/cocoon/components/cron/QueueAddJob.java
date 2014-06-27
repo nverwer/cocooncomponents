@@ -44,29 +44,29 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
     private String uri;
     private String jobName;
     private String jobDescription;
-    
 
     @SuppressWarnings("rawtypes")
     @Override
     public void setup(Parameters params, Map objects) {
         try {
+            if (this.getLogger().isInfoEnabled()) {
+                this.getLogger().info(String.format("params = %s", params));
+            }
             this.uri = params.getParameter(JOBURI_PARAMETER);
             this.jobName = params.getParameter(JOBNAME_PARAMETER, "Auto-generated job");
             this.jobDescription = params.getParameter(JOBDESCRIPTION_PARAMETER,
                     "Automatically added by QueueAddJob.");
-            
 
-        if (this.getLogger().isInfoEnabled()) {
-            this.getLogger().info(String.format("job-uri = %s", uri));
-            this.getLogger().info(String.format("job-name = %s", jobName));
-            this.getLogger().info(String.format("job-description = %s", jobDescription));
-        }
-        
+            if (this.getLogger().isInfoEnabled()) {
+                this.getLogger().info(String.format("job-uri = %s", uri));
+                this.getLogger().info(String.format("job-name = %s", jobName));
+                this.getLogger().info(String.format("job-description = %s", jobDescription));
+            }
+
         } catch (ParameterException ex) {
             Logger.getLogger(QueueAddJob.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-
 
     /**
      * Return File object for parent/path, creating it if necessary.
@@ -83,7 +83,6 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
         return dir;
     }
 
-
     /**
      * Get path to queue folder.
      *
@@ -95,7 +94,6 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
         String actualQueuesDirName = config.getChild(PARAMETER_QUEUE_PATH).getValue();
         queuePath = new File(actualQueuesDirName);
     }
-
 
     /**
      * Create a new job in the inDir.
@@ -109,13 +107,13 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
         File inDir = getOrCreateDirectory(queueDir, inDirName);
 
         UUID jobID = UUID.randomUUID();
-        
+
         Task[] tasks = new Task[1];
         Task task = new Task();
         task.id = UUID.randomUUID().toString();
         task.uri = this.uri;
         tasks[0] = task;
-        
+
         JobConfig job = new JobConfig();
         job.id = jobID.toString();
         job.description = this.jobDescription;
@@ -123,20 +121,18 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
         job.name = this.jobName;
         job.created = new Date();
         job.tasks = tasks;
-        
+
         File currentJobFile = new File(inDir, String.format("job-%s.xml", jobID));
 
         if (this.getLogger().isInfoEnabled()) {
             this.getLogger().info(String.format("New job: %s", currentJobFile.getAbsolutePath()));
         }
-        
+
         XStream xstream = getXStreamJobConfig();
-        
+
         xstream.toXML(job, new FileOutputStream(currentJobFile));
-        
+
     }
-
-
 
     /**
      * Main entrypoint for CronJob.
