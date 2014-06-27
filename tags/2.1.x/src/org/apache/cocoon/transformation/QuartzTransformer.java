@@ -254,7 +254,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
                 String.format("%s:%s", QUARTZ_PREFIX, RESULT_ELEMENT),
                 EMPTY_ATTRIBUTES);
         char[] output = result.toCharArray();
-        xmlConsumer.characters(output, 0, output.length - 1);
+        xmlConsumer.characters(output, 0, output.length);
         xmlConsumer.endElement(QUARTZ_NAMESPACE_URI, RESULT_ELEMENT,
                 String.format("%s:%s", QUARTZ_PREFIX, RESULT_ELEMENT));
     }
