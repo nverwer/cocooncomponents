@@ -54,7 +54,9 @@ import org.xml.sax.SAXException;
  *      Job called @job-name having description @job-description.
  *   <quartz:delete name="MyJob" />
  * </pre>
- * 
+ * The cron:add and cron:delete elements produce a cron:result element with
+ * either &quot;OK&quot; or &quot;ERROR {error-message}&quot;.
+ *
  * @author Huib Verweij (hhv@x-scale.nl)
  *
  */
@@ -73,6 +75,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
 
     private static final String JOBS_ELEMENT = "jobs";
     private static final String JOB_ELEMENT = "job";
+    private static final String RESULT_ELEMENT = "result";
     private static final String SCHEDULE_ATTR = "schedule";
     private static final String NEXTTIME_ATTR = "next-time";
     private static final String ISRUNNING_ATTR = "is-running";
@@ -109,10 +112,11 @@ public class QuartzTransformer extends AbstractSAXTransformer {
             if (this.name == null) {
                 throw new ProcessingException("The " + NAME_ATTR + " attribute is mandatory for " + ADD_ELEMENT + " elements.");
             }
-            this.cron = getAttribute(attr, CRON_ATTR, null);
-            if (this.cron == null) {
-                throw new ProcessingException("The " + CRON_ATTR + " attribute is mandatory for " + ADD_ELEMENT + " elements.");
-            }
+            this.cron = getAttribute(attr, CRON_ATTR, "");
+            // HHV: Without a cron spec the job is executed only once.
+//            if (this.cron == null) {
+//                throw new ProcessingException("The " + CRON_ATTR + " attribute is mandatory for " + ADD_ELEMENT + " elements.");
+//            }
             this.jobName = getAttribute(attr, JOBNAME_ATTR, null);
             this.jobDescription = getAttribute(attr, JOBDESCRIPTION_ATTR, null);
         }
@@ -135,7 +139,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
         }
         if (name.equals(ADD_ELEMENT)) {
             try {
-                addCronJob(this.uri, this.name, this.cron);
+                addCronJob();
             } catch (ParseException ex) {
                 Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
             } catch (ServiceException ex) {
@@ -162,7 +166,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
      * @throws ParseException
      * @throws ServiceException 
      */
-    private void addCronJob(String uri, String name, String cron)
+    private void addCronJob()
             throws ProcessingException, IOException, SAXException, ParseException, ServiceException {
 
         CocoonQuartzJobScheduler cqjs = (CocoonQuartzJobScheduler) this.manager.
@@ -174,12 +178,24 @@ public class QuartzTransformer extends AbstractSAXTransformer {
         parameters.setParameter(JOBDESCRIPTION_ATTR, this.jobDescription);
         try {
 
-            if (this.getLogger().isInfoEnabled()) {
-                this.getLogger().info("Add cronjob: job = " + name);
+            // If cron == "" just fire the job once
+            if ("".equals(this.cron)) {
+                cqjs.fireJob(QueueAddJob.ROLE, parameters, null);
+                result("OK");
             }
+            else {
+                 // cron != "", add recurring cronjob.
+                if (this.getLogger().isInfoEnabled()) {
+                    this.getLogger().info(
+                            String.format("Add cronjob: name=%s, cron=%s, uri=%s, description=%s.",
+                                    this.name, this.cron, this.uri, this.jobDescription));
+                }
 
-            cqjs.addJob(name, QueueAddJob.ROLE, cron, false, parameters, null);
+                cqjs.addJob(name, QueueAddJob.ROLE, this.cron, false, parameters, null);
+                result("OK");
+            }
         } catch (CascadingException ex) {
+            result("ERROR " + ex.getMessage());
             Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
@@ -217,7 +233,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
                 String.format("%s:%s", QUARTZ_PREFIX, JOBS_ELEMENT));
     }
 
-    private void deleteCronJob(String name) throws ServiceException {
+    private void deleteCronJob(String name) throws ServiceException, SAXException {
 
         CocoonQuartzJobScheduler cqjs = (CocoonQuartzJobScheduler) this.manager.
                 lookup(CocoonQuartzJobScheduler.ROLE);
@@ -225,7 +241,22 @@ public class QuartzTransformer extends AbstractSAXTransformer {
         if (this.getLogger().isInfoEnabled()) {
             this.getLogger().info("Delete cronjob: job = " + name);
         }
-        cqjs.removeJob(name);
+        try {
+            cqjs.removeJob(name);
+            result("OK.");
+        } catch (Exception ex) {
+            result("ERROR." + ex.getMessage());
+        }
+    }
+
+    private void result(String result) throws SAXException {
+        xmlConsumer.startElement(QUARTZ_NAMESPACE_URI, RESULT_ELEMENT,
+                String.format("%s:%s", QUARTZ_PREFIX, RESULT_ELEMENT),
+                EMPTY_ATTRIBUTES);
+        char[] output = result.toCharArray();
+        xmlConsumer.characters(output, 0, output.length - 1);
+        xmlConsumer.endElement(QUARTZ_NAMESPACE_URI, RESULT_ELEMENT,
+                String.format("%s:%s", QUARTZ_PREFIX, RESULT_ELEMENT));
     }
 
 }
