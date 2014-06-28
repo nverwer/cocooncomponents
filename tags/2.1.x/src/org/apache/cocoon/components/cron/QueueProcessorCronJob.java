@@ -147,7 +147,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
     private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
-    private static final long TASK_TIMEOUT = 50000;
+    private static final long TASK_TIMEOUT = 500000; // 50 min.
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
@@ -402,7 +402,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         InputStream is = null;
         String result = null;
         try {
+            logger.info("Going to resolve " + url);
             src = resolver.resolveURI(url);
+            logger.info("Resolved " + url);
             is = src.getInputStream();
             StringWriter writer = new StringWriter();
             IOUtils.copy(is, writer, "UTF-8");
