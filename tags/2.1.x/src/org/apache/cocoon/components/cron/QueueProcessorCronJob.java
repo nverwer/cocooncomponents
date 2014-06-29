@@ -402,9 +402,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         InputStream is = null;
         String result = null;
         try {
-            logger.info("Going to resolve " + url);
+//            logger.debug("Going to resolve " + url);
             src = resolver.resolveURI(url);
-            logger.info("Resolved " + url);
+//            logger.debug("Resolved " + url);
             is = src.getInputStream();
             StringWriter writer = new StringWriter();
             IOUtils.copy(is, writer, "UTF-8");
