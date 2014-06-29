@@ -357,7 +357,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 }
                 f = jobExecutor.poll(TASK_TIMEOUT, TimeUnit.MILLISECONDS);
                 if (null == f) {
-                    this.getLogger().error("Failed getting next finished task (TASK_TIMEOUT), quitting.");
+                    this.getLogger().error("Failed getting next finished task (TASK_TIMEOUT (="+TASK_TIMEOUT+")), quitting.");
                     interrupted = true;
                 } else {
                     if (this.getLogger().isDebugEnabled()) {
