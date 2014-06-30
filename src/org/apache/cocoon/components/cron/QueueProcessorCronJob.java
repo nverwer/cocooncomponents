@@ -146,8 +146,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
-    private static final long PROCESSOR_STATUS_FILE_STALE = 60000;
-    private static final long TASK_TIMEOUT = 500000; // 50 min.
+    private static final long PROCESSOR_STATUS_FILE_STALE = 1200000;
+    private static final long TASK_TIMEOUT = 3000000; // 50 min.
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
@@ -229,14 +229,13 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     /**
      * The object that runs a task.
      */
-    private static class CocoonTaskRunner extends CocoonRunnable {
+    private class CocoonTaskRunner extends CocoonRunnable {
 
         private final Task task;
         private final SourceResolver resolver;
         private final org.apache.avalon.framework.logger.Logger logger;
         private final OutputStream os;
         private final int sequenceNumber;
-        String result;
 
         public CocoonTaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os, int sequenceNumber) {
             this.task = t;
@@ -250,13 +249,14 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         @Override
         public void doRun() {
 
+            String result;
             String baseMsg = String.format("\nTASK %s (%s)", this.sequenceNumber, this.task.uri);
             String pipelineResult = null;
 
             try {
-                pipelineResult = processPipeline(task.uri, resolver, logger, os);
+                pipelineResult = processPipeline(task.uri, resolver, logger);
             } catch (Exception ex) {
-                logger.info("Exception for task " + task.uri + " : " + (ex.getMessage()));
+                logger.error("Exception for task " + task.uri + " : " + (ex.getMessage()));
                 pipelineResult = String.format("ERROR %s", ex.getMessage());
 
                 result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
@@ -349,7 +349,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         boolean interrupted = false;
 
         threadPool.shutdown();
-        while (!threadPool.isTerminated() && !interrupted) {
+        while (!threadPool.isTerminated() && !interrupted && completedTasks < totalTasks) {
             Future<CocoonTaskRunner> f = null;
             try {
                 if (this.getLogger().isDebugEnabled()) {
@@ -397,18 +397,24 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param os Where the output ends up.
      * @return the output as a String object
      */
-    private static String processPipeline(String url, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os) throws IOException {
+    private String processPipeline(String url, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger) throws Exception {
         Source src = null;
         InputStream is = null;
-        String result = null;
+        String result = "";
         try {
-//            logger.debug("Going to resolve " + url);
+            if (logger.isDebugEnabled())
+                logger.debug("Going to resolve " + url);
             src = resolver.resolveURI(url);
-//            logger.debug("Resolved " + url);
+            if (logger.isDebugEnabled())
+                logger.debug("Resolved " + url);
             is = src.getInputStream();
             StringWriter writer = new StringWriter();
             IOUtils.copy(is, writer, "UTF-8");
             result = writer.toString();
+        } catch (Exception ex) {
+            result = ex.getLocalizedMessage();
+            logger.error(String.format("processPipeline ERROR! %s", result));
+            throw(ex);
         } finally {
             try {
                 if (null != is) {
