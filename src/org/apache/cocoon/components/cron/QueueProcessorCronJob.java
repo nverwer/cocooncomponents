@@ -245,36 +245,38 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             this.sequenceNumber = sequenceNumber;
         }
 
-//        @Override
         @Override
         public void doRun() {
 
-            String result;
             String baseMsg = String.format("\nTASK %s (%s)", this.sequenceNumber, this.task.uri);
             String pipelineResult = null;
+            boolean ok = true;
 
             try {
                 pipelineResult = processPipeline(task.uri, resolver, logger);
             } catch (Exception ex) {
-                logger.error("Exception for task " + task.uri + " : " + (ex.getMessage()));
-                pipelineResult = String.format("ERROR %s", ex.getMessage());
+                ok = false;
+                logger.error("Exception for task " + task.uri + " : " + (ex.getLocalizedMessage()));
+                String errorMessage = String.format("ERROR %s", ex.getMessage());
 
-                result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
-                synchronized (os) {
-                    try {
-                        os.write(result.getBytes());
-                    } catch (IOException ex1) {
-                        Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex1);
-                    }
+                String errorResult = String.format("%s\n%s\n\n", baseMsg, errorMessage);
+//                synchronized (os) {
+                try {
+                    os.write(errorResult.getBytes());
+                } catch (IOException ex1) {
+                    Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex1);
                 }
+//                }
             }
 
-            result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
-            synchronized (os) {
+            if (ok) {
+                String result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
+//            synchronized (os) {
                 try {
                     os.write(result.getBytes());
                 } catch (IOException ex) {
                     Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
+//                }
                 }
             }
             return;
@@ -348,7 +350,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         }
         boolean interrupted = false;
 
-        threadPool.shutdown();
+        threadPool.shutdown(); // Means: process all tasks.
+        
         while (!threadPool.isTerminated() && !interrupted && completedTasks < totalTasks) {
             Future<CocoonTaskRunner> f = null;
             try {
@@ -357,7 +360,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 }
                 f = jobExecutor.poll(TASK_TIMEOUT, TimeUnit.MILLISECONDS);
                 if (null == f) {
-                    this.getLogger().error("Failed getting next finished task (TASK_TIMEOUT (="+TASK_TIMEOUT+")), quitting.");
+                    this.getLogger().error("Failed getting next finished task (TASK_TIMEOUT (=" + TASK_TIMEOUT + ")), quitting.");
                     interrupted = true;
                 } else {
                     if (this.getLogger().isDebugEnabled()) {
@@ -402,11 +405,13 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         InputStream is = null;
         String result = "";
         try {
-            if (logger.isDebugEnabled())
+            if (logger.isDebugEnabled()) {
                 logger.debug("Going to resolve " + url);
+            }
             src = resolver.resolveURI(url);
-            if (logger.isDebugEnabled())
+            if (logger.isDebugEnabled()) {
                 logger.debug("Resolved " + url);
+            }
             is = src.getInputStream();
             StringWriter writer = new StringWriter();
             IOUtils.copy(is, writer, "UTF-8");
@@ -414,7 +419,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         } catch (Exception ex) {
             result = ex.getLocalizedMessage();
             logger.error(String.format("processPipeline ERROR! %s", result));
-            throw(ex);
+            throw (ex);
         } finally {
             try {
                 if (null != is) {
