@@ -34,20 +34,45 @@ import org.xml.sax.SAXException;
 
 /**
  * This transformer creates a new Zip file on disk.
- 
- This transformer triggers for element in the namespace "http://apache.org/cocoon/zip-it/1.0".
- 
- Example XML input:
- <pre>
+ * <p>
+ * It triggers for elements in the namespace "http://apache.org/cocoon/zip-it/1.0".
+ * <p>
+ * Example XML input:
+ * <pre>
+ * {@code
  *   <zip-it:archive filename="file:///tmp/my-temp-store/zipfile.zip">
  *       <zip-it:entry name="entry-1" src="cocoon://entry-1"/>
  *   </zip-it:archive>
+ * }
+ * </pre>
  * The @filename specifies the file that should be created.
  * The @name attribute specifies the filename of the entry in the zip file.
  * The @src attribute is a URI providing the content for the entry.
+ * <p>
+ * The result is
+ * <pre>
+ * {@code
+ *   <zip:result>OK</zip:result>
+ * }
+ * </pre>
+ * or it throws an error.
  *
- * The result is a <zip:result>OK</zip:result> element.
- *
+ * Define this transformer in the sitemap:
+ * <pre>
+ * {@code
+ * <map:components>
+ *   <map:transformers>
+ *     <map:transformer name="zip-it" logger="sitemap.transformer.zip-it"
+ *         src="org.apache.cocoon.transformation.ZipItTransformer"/>
+ *  ...
+ * }
+ * </pre>
+ * Use this transformer:
+ * <pre>
+ * {@code
+ * <map:transform type="zip-it"/>
+ * }
+ * </pre>
  * @author Huib Verweij (hhv@x-scale.nl)
  *
  */
