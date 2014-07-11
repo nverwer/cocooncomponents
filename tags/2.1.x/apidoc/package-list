@@ -1,3 +1,4 @@
+org.apache.cocoon.components.cron
 org.apache.cocoon.components.language.markup.xsp
 org.apache.cocoon.components.modules.input
 org.apache.cocoon.generation
