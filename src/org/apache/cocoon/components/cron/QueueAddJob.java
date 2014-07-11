@@ -20,13 +20,12 @@ import org.apache.cocoon.components.cron.QueueProcessorCronJob.JobConfig;
 import org.apache.cocoon.components.cron.QueueProcessorCronJob.Task;
 import static org.apache.cocoon.components.cron.QueueProcessorCronJob.getXStreamJobConfig;
 import org.apache.cocoon.components.cron.ServiceableCronJob;
-import org.joda.time.DateTime;
 
 /**
  *
- * @author <a href="mailto:huib.verweij@koop.overheid.nl">Huib Verweij</a>
+ * Submit a job to a queue.
  *
- * Submitted a job to a queue.
+ * @author <a href="mailto:huib.verweij@koop.overheid.nl">Huib Verweij</a>
  *
  */
 public class QueueAddJob extends ServiceableCronJob implements Configurable, ConfigurableCronJob {

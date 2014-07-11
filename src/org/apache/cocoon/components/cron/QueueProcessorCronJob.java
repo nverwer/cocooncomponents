@@ -53,93 +53,110 @@ import org.joda.time.DateTime;
 
 /**
  *
- * @author <a href="mailto:huib.verweij@koop.overheid.nl">Huib Verweij</a>
- *
  * Execute jobs that are submitted to a queue.
  *
+ * <p>
  * A queue is a directory on disk that contains jobs-to-be-executed in the "in"
  * subdirectory.
- *
+ * <p>
  * A job is a XML file containing meta-data describing the job and one or more
- * smaller tasks that are part of the job. A task contains a URL that is
+ * subtasks that are part of the job. A task contains a URL that is
  * 'resolved' when the task is executed. The output of the URL ends up in a
- * task-{id}.xml file. Note that tasks are executed *** in random order ***.
- *
- * A queue has four directories: "in", "in-progress", "out" and "error". 1 New
- * jobs that are waiting to be processed are in "in". 2 The one job that is
- * being executed is in "in-progress". 3 Finished jobs are zipped. Job-file and
- * task-output files end up in "out". 4 Jobs that could not be executed at all
+ * task-results.txt file. Note that tasks are executed *** in random order ***.
+ * <p>
+ * A queue has four directories: "in", "in-progress", "out" and "error". 1 - New
+ * jobs that are waiting to be processed are in "in". 2 - The one job that is
+ * being executed is in "in-progress". 3 - Finished jobs are zipped. Job-file and
+ * task-output files end up in "out". 4 - Jobs that could not be executed at all
  * (or generated an error in this class)end up in "error".
- *
+ * <p>
  * Execute this object (a "Processor") every n (micro)seconds using a Cocoon
  * Quartz job and it will process one job in a queue. Processing a job means
  * moveing the job-*.xml file to "in-progress" and starting a separate thread
  * for each task in the job, then waiting till all tasks have finished.
- *
+ * <p>
  * While executing, a Processor updates the file Queue/processor-status.xml
  * every 10 seconds or so with the following info:
- *
- * &lt;processor id="thread-id" started="dateTime"
+* <p>
+ * <pre>
+ * {@code
+ * <processor id="thread-id" started="dateTime"
  * tasks="nr of tasks" tasks-completed="nr of completed tasks" />
-
- This file can be read in order to get an idea of the progress of
- the current job. It also indicates whether the current job is being processed
- at all - if the modified timestamp of the file is older than, say, a minute,
- it is assumed the Processor/job has failed. However, when more than one
- QueueProcessorCronJob is allowed to run at the same time, this can go wrong if a
- task takes longer to complete than said minute. This is because the
- processor-status.xml file is only updated after a task has completed
- (successfully or not). It is therefore recommended to have the
- concurrent-runs="false" attribute on a Trigger.
-
- When a Processor starts there are a few possible scenarios: 1 another job is
- already being processed and that Processor is still alive -> quit. 2 there is
+ * }
+ * </pre>
+ * <p>
+ * This file can be read in order to get an idea of the progress of
+ * the current job. It also indicates whether the current job is being processed
+ * at all - if the modified timestamp of the file is older than, say, a minute,
+ * it is assumed the Processor/job has failed. However, when more than one
+ * QueueProcessorCronJob is allowed to run at the same time, this can go wrong if a
+ * task takes longer to complete than said minute. This is because the
+ * processor-status.xml file is only updated after a task has completed
+ * (successfully or not). It is therefore recommended to have the
+ * concurrent-runs="false" attribute on a Trigger.
+ * <p>
+ * When a Processor starts there are a few possible scenarios: 1 another job is
+ * already being processed and that Processor is still alive -> quit. 2 there is
  * no job to be processed -> quit. 3 there is no other Processor running but
  * there's a job already being processed -> move job to "error"-directory, quit.
  * 4 there is a job to be processed and no Processor active -> start processing
  * a new job.
- *
+ * <p>
  * To submit a job, place a XML file called "job-{id}.xml" in the
  * "in"-directory, containing the following structure:
- *
- * &lt;job id="..." name="test-job" description="..."
- * created="20140613T11:45:00" max-concurrent="3">
- *    &lt;tasks>
- *        &lt;task id="task-1">
- *           &lt;uri>http://localhost:8888/koop/front/queue-test?id=1&lt;/uri>
- *        &lt;/task>
+ * <p>
+ * <pre>
+ * {@code
+ * <job id="..." name="test-job" description="..."
+ *   created="20140613T11:45:00" max-concurrent="3">
+ *    <tasks>
+ *        <task id="task-1">
+ *           <uri>http://localhost:8888/koop/front/queue-test?id=1</uri>
+ *        </task>
  *        ...
- *    &lt;/tasks>
- * &lt;/job>
- *
+ *    </tasks>
+ * </job>
+ * }
+ * </pre>
+ * <p>
  * The max-concurrent attribute can be positive or negative. When it is 
  * positive it is the maximum number of concurrent threads but the actual 
  * number of concurrent threads will never be higher than the number of
  * available cores. When it is negative the number of threads used is the 
  * number of available cores plus the max-concurrent attribute (resulting in a
  * smaller number); but it is always at least one.
- *
+ * <p>
  * To add this cronjob to Cocoon add a trigger to the Quartzcomponent
  * configuration and declare this component in the same sitemap.
- *
- * &lt;component
+ * <p>
+ * <pre>
+ * {@code
+ * <component
  *   class="org.apache.cocoon.components.cron.CocoonQuartzJobScheduler"
  *   logger="cron" role="org.apache.cocoon.components.cron.JobScheduler">
  *   .....
- *   &lt;trigger name="queueprocessor-job"
+ *   <trigger name="queueprocessor-job"
  *       target="org.apache.cocoon.components.cron.CronJob/queueprocessor"
  *       concurrent-runs="false">
- *       &lt;cron>0/10 * * * * ?&lt;/cron>
- *   &lt;/trigger>
- * &lt;/component>
- *
+ *       <cron>0/10 * * * * ?</cron>
+ *   </trigger>
+ * </component>
+ * }
+ * </pre>
+ * <p>
  * and
- *
- * &lt;component class="org.apache.cocoon.components.cron.QueueProcessorCronJob"
- logger="cron.publish"
- role="org.apache.cocoon.components.cron.CronJob/queueprocessor">
- *    &lt;queue-path>path-to-queue-directory-on-disk&lt;/queue-path>
- * &lt;/component>
+ * <p>
+ * <pre>
+ * {@code
+ * <component class="org.apache.cocoon.components.cron.QueueProcessorCronJob"
+ *   logger="cron.publish"
+ *   role="org.apache.cocoon.components.cron.CronJob/queueprocessor">
+ *    <queue-path>path-to-queue-directory-on-disk</queue-path>
+ * </component>
+ * }
+ * </pre>
+ * <p>
+ * @author <a href="mailto:huib.verweij@koop.overheid.nl">Huib Verweij</a>
  *
  */
 public class QueueProcessorCronJob extends ServiceableCronJob implements Configurable, ConfigurableCronJob {

@@ -30,7 +30,6 @@ import org.apache.cocoon.components.cron.JobSchedulerEntry;
 import org.apache.cocoon.components.cron.QueueAddJob;
 import org.apache.cocoon.environment.SourceResolver;
 import org.apache.cocoon.xml.AttributesImpl;
-import org.apache.excalibur.source.SourceParameters;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 
@@ -38,25 +37,37 @@ import org.xml.sax.SAXException;
  * This transformer can list Quartz Cronjobs and add new cronjobs or delete them.
  * Any cronjob can be deleted. Added cronjobs create a new Queue job with just
  * one task using the job-uri attribute and the job-name and job-description
- * attributes. See org.apache.cocoon.components.cron.QueueAddJob and 
- * org.apache.cocoon.components.cron.QueueProcessorCronjob.
- * 
+ * attributes.
+ * <p>
  * This transformer triggers for element in the namespace "http://apache.org/cocoon/quartz/1.0".
- * 
+ * <p>
  * Example XML input:
+ * <p>
  * <pre>
+ * {@code
  *   <quartz:list/>
+ * }
+ * </pre>
+ * <pre>
+ * {@code
  *   <quartz:add name="MyJob" cron="0 &#42;/2 * * *"
  *               job-uri="/myapp/myjob?query-param=value"
  *               job-name="myjob"
  *               job-description="Do some stuff later on using the QueueProcessor"/>
- *      The @job-uri specifies the URI that should be resolved by the 
- *      Job called @job-name having description @job-description.
+ * }
+ * </pre>
+ * The @job-uri specifies the URI that should be resolved by the 
+ * Job called @job-name having description @job-description.
+ * <pre>
+ * {@code
  *   <quartz:delete name="MyJob" />
+ * }
  * </pre>
  * The cron:add and cron:delete elements produce a cron:result element with
  * either &quot;OK&quot; or &quot;ERROR {error-message}&quot;.
- *
+ * <p>
+ * @see org.apache.cocoon.components.cron.QueueAddJob
+ * @see org.apache.cocoon.components.cron.QueueProcessorCronjob
  * @author Huib Verweij (hhv@x-scale.nl)
  *
  */
