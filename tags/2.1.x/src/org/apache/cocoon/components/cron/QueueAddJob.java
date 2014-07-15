@@ -129,7 +129,9 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
 
         XStream xstream = getXStreamJobConfig();
 
-        xstream.toXML(job, new FileOutputStream(currentJobFile));
+        FileOutputStream fos = new FileOutputStream(currentJobFile);
+        xstream.toXML(job, fos);
+        fos.close();
 
     }
 
