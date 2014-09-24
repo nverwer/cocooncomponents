@@ -151,7 +151,8 @@ public class ZipItTransformer extends AbstractSAXTransformer {
      */
     private void createZip() throws IOException {
         File zipFile = new File(this.filename);
-
+        zipFile.getParentFile().mkdirs();
+        
         if (this.getLogger().isDebugEnabled()) {
             this.getLogger().debug("Creating Zip file.");
         }
