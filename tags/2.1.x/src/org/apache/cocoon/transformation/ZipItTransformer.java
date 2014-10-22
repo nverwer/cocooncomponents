@@ -162,20 +162,32 @@ public class ZipItTransformer extends AbstractSAXTransformer {
         this.zos = new ZipOutputStream(fos);
     }
 
-    private void addEntry() throws IOException {
-        // create byte buffer
-        byte[] buffer = new byte[1024];
-
-        Source entrySource = resolver.resolveURI(this.src);
-        // begin writing a new ZIP entry, positions the stream to the start of the entry data
-        InputStream is = entrySource.getInputStream();
-        // begin writing a new ZIP entry, positions the stream to the start of the entry data
-        zos.putNextEntry(new ZipEntry(this.name));
-        int length;
-        while ((length = is.read(buffer)) > 0) {
-            zos.write(buffer, 0, length);
+    private void addEntry() {
+        InputStream is = null;
+        try {
+            // create byte buffer
+            byte[] buffer = new byte[1024];
+            Source entrySource = resolver.resolveURI(this.src);
+            // begin writing a new ZIP entry, positions the stream to the start of the entry data
+            is = entrySource.getInputStream();
+            // begin writing a new ZIP entry, positions the stream to the start of the entry data
+            zos.putNextEntry(new ZipEntry(this.name));
+            int length;
+            while ((length = is.read(buffer)) > 0) {
+                zos.write(buffer, 0, length);
+            }   is.close();
+            zos.closeEntry();
+        } catch (IOException ex) {
+            Logger.getLogger(ZipItTransformer.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
+            try {
+                if (null != is) {
+                    is.close();
+                }
+            } catch (IOException ex) {
+                Logger.getLogger(ZipItTransformer.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
-        zos.closeEntry();
     }
 
     private void result(String result) throws SAXException {
