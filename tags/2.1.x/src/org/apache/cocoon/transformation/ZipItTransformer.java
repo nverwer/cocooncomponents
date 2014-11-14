@@ -175,7 +175,8 @@ public class ZipItTransformer extends AbstractSAXTransformer {
             int length;
             while ((length = is.read(buffer)) > 0) {
                 zos.write(buffer, 0, length);
-            }   is.close();
+            }
+            is.close();
             zos.closeEntry();
         } catch (IOException ex) {
             Logger.getLogger(ZipItTransformer.class.getName()).log(Level.SEVERE, null, ex);

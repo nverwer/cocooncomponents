@@ -18,10 +18,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.Map;
+import java.util.Properties;
+import java.util.TimeZone;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -39,9 +42,13 @@ import org.apache.avalon.framework.configuration.Configuration;
 import org.apache.avalon.framework.configuration.ConfigurationException;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.avalon.framework.service.ServiceException;
+import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.components.cron.ConfigurableCronJob;
 import org.apache.cocoon.components.cron.ServiceableCronJob;
+import org.apache.cocoon.components.source.SourceUtil;
 import org.apache.cocoon.environment.CocoonRunnable;
+import org.apache.cocoon.xml.XMLUtils;
+import org.apache.cocoon.xml.dom.DOMUtil;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
@@ -49,7 +56,13 @@ import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.excalibur.source.Source;
 import org.apache.excalibur.source.SourceResolver;
+import org.apache.xml.serialize.OutputFormat;
 import org.joda.time.DateTime;
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
 
 /**
  *
@@ -72,7 +85,7 @@ import org.joda.time.DateTime;
  * <p>
  * Execute this object (a "Processor") every n (micro)seconds using a Cocoon
  * Quartz job and it will process one job in a queue. Processing a job means
- * moveing the job-*.xml file to "in-progress" and starting a separate thread
+ * moving the job-*.xml file to "in-progress" and starting a separate thread
  * for each task in the job, then waiting till all tasks have finished.
  * <p>
  * While executing, a Processor updates the file Queue/processor-status.xml
@@ -264,39 +277,31 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
         @Override
         public void doRun() {
-
-            String baseMsg = String.format("\nTASK %s (%s)", this.sequenceNumber, this.task.uri);
-            String pipelineResult = null;
-            boolean ok = true;
-
             try {
-                pipelineResult = processPipeline(task.uri, resolver, logger);
-            } catch (Exception ex) {
-                ok = false;
-                logger.error("Exception for task " + task.uri + " : " + (ex.getLocalizedMessage()));
-                String errorMessage = String.format("ERROR %s", ex.getMessage());
+                Document doc = DOMUtil.createDocument();
 
-                String errorResult = String.format("%s\n%s\n\n", baseMsg, errorMessage);
-//                synchronized (os) {
-                try {
-                    os.write(errorResult.getBytes());
-                } catch (IOException ex1) {
-                    Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex1);
-                }
-//                }
-            }
+                Element taskNode = doc.createElement("task");
 
-            if (ok) {
-                String result = String.format("%s\n%s\n\n", baseMsg, pipelineResult);
-//            synchronized (os) {
-                try {
-                    os.write(result.getBytes());
-                } catch (IOException ex) {
-                    Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
-//                }
-                }
+                taskNode.setAttribute("id", sequenceNumber + "");
+
+                taskNode.setAttribute("uri", task.uri);
+
+                taskNode.setAttribute("startedAt", "" + new org.joda.time.DateTime());
+                
+                Element taskResult = processPipeline(task.uri, resolver, logger, doc);
+                
+                taskNode.setAttribute("finishedAt", "" + new org.joda.time.DateTime());
+
+                taskNode.appendChild(taskResult);
+
+                Properties properties = XMLUtils.createPropertiesForXML(true);                
+                writeOutputStream(os, XMLUtils.serializeNode(taskNode, properties));
+                
+            } catch (ProcessingException ex) {
+                Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
+                String result = String.format("\n%s\n%s\n%s\n", "<error>", ex.getLocalizedMessage(), "</error>");
+                writeOutputStream(os, result);
             }
-            return;
         }
 
     }
@@ -354,8 +359,10 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         CompletionService<CocoonTaskRunner> jobExecutor = new ExecutorCompletionService<CocoonTaskRunner>(threadPool);
         SourceResolver resolver = (SourceResolver) this.manager.lookup(SourceResolver.ROLE);
 
-        File outputFile = new File(inDir, "task-results.txt");
+        File outputFile = new File(inDir, "task-results.xml");
         OutputStream os = new FileOutputStream(outputFile);
+
+        writeOutputStream(os, "<tasks>");
 
         int submittedTasks = 0;
         for (Task t : jobConfig.tasks) {
@@ -403,6 +410,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         if (interrupted) {
             threadPool.shutdownNow();
         }
+        
+        writeOutputStream(os, "</tasks>");
         os.close();
         this.manager.release(resolver);
     }
@@ -417,10 +426,13 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param os Where the output ends up.
      * @return the output as a String object
      */
-    private String processPipeline(String url, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger) throws Exception {
+    private Element processPipeline(String url,
+            SourceResolver resolver,
+            org.apache.avalon.framework.logger.Logger logger,
+            Document doc)  {
         Source src = null;
         InputStream is = null;
-        String result = "";
+        Element node = null;
         try {
             if (logger.isDebugEnabled()) {
                 logger.debug("Going to resolve " + url);
@@ -429,19 +441,19 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             if (logger.isDebugEnabled()) {
                 logger.debug("Resolved " + url);
             }
-            is = src.getInputStream();
-            StringWriter writer = new StringWriter();
-            IOUtils.copy(is, writer, "UTF-8");
-            result = writer.toString();
+            Document srcDoc = SourceUtil.toDOM(src);
+            Node srcNode = srcDoc.getFirstChild();
+            node = (Element)doc.importNode(srcNode, true);
         } catch (Exception ex) {
-            result = ex.getLocalizedMessage();
-            logger.error(String.format("processPipeline ERROR! %s", result));
-            throw (ex);
+            node = doc.createElement("task-error");
+            node.appendChild(doc.createTextNode(ex.getLocalizedMessage()));
         } finally {
             try {
                 if (null != is) {
                     is.close();
                 }
+            } catch (IOException ex) {
+                Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
             } finally {
                 if (null != src) {
                     resolver.release(src);
@@ -449,7 +461,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 }
             }
         }
-        return result;
+        return node;
     }
 
     /**
@@ -699,6 +711,18 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             }
         });
         return files[0];
+    }
+    
+    
+    private void writeOutputStream(OutputStream os, String msg) {            
+//            synchronized (os) {
+            try {
+                os.write(msg.getBytes());
+            } catch (IOException ex) {
+                Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
+//              }
+            }
+
     }
 
     /**

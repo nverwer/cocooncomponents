@@ -244,7 +244,7 @@ public class HtmlMailTransformer extends AbstractSAXTransformer {
     /* Fill the headers */
     message.setSubject(subject);
     message.setFrom(new InternetAddress(this.fromAddress));
-    message.addRecipient(Message.RecipientType.TO, new InternetAddress(toAddress));
+    message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(toAddress));
     /* Create new message part. */
     BodyPart messageBodyPart = new MimeBodyPart();
     messageBodyPart.setContent(body, "text/html");
