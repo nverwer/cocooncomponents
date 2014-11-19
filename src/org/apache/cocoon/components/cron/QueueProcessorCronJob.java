@@ -362,7 +362,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         File outputFile = new File(inDir, "task-results.xml");
         OutputStream os = new FileOutputStream(outputFile);
 
-        writeOutputStream(os, "<tasks>");
+        writeOutputStream(os, String.format("<tasks job-id=\"%s\" job-name=\"%s\">", jobConfig.id, jobConfig.name));
 
         int submittedTasks = 0;
         for (Task t : jobConfig.tasks) {
