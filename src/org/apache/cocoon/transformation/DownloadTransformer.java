@@ -42,7 +42,7 @@ import org.xml.sax.SAXException;
  * The result is
  * <pre>
  * {@code
- *   <download:result>file://path/to/file/on/disk</download:result>
+ *   <download:result>/path/to/file/on/disk</download:result>
  * }
  * </pre>
  * or 
@@ -98,7 +98,7 @@ public class DownloadTransformer extends AbstractTransformer {
             try {
                 File downloadedFile
                         = download(attributes.getValue(SRC_ATTRIBUTE), attributes.getValue(TARGETDIR_ATTRIBUTE), attributes.getValue(TARGET_ATTRIBUTE));
-                String absPath = downloadedFile.getAbsolutePath();
+                String absPath = downloadedFile.getCanonicalPath();
                 super.startElement(namespaceURI, RESULT_ELEMENT, qName, attributes);
                 super.characters(absPath.toCharArray(), 0, absPath.length());
                 super.endElement(namespaceURI, RESULT_ELEMENT, qName);
