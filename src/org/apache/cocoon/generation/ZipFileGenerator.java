@@ -67,7 +67,7 @@ public class ZipFileGenerator extends ServiceableGenerator {
     try {
       zipFile = new ZipFile(systemId.replaceFirst("^file:", ""), Charset.forName("UTF-8"));
       zipEntry = zipFile.getEntry(entryName);
-      if (zipEntry == null) throw new ProcessingException(systemId+" does not contaion the entry "+entryName);
+      if (zipEntry == null) throw new ProcessingException(systemId+" does not contain the entry "+entryName);
     } catch (ZipException e) {
       throw new ProcessingException(e);
     } catch (IOException e) {
