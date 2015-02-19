@@ -100,7 +100,7 @@ import org.xml.sax.SAXException;
  *   </sparql:query>
  * </pre>
  * 
- * @author Nico Verwer (nico.verwer@withart.com)
+ * @author Nico Verwer (nverwer@rakensi.com)
  *
  */
 public class SparqlTransformer extends AbstractSAXTransformer {
