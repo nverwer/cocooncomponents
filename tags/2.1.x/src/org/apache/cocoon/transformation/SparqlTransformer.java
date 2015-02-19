@@ -57,6 +57,7 @@ import org.xml.sax.SAXException;
  * 
  * The optional <code>content</code> attribute indicates if the content of the <code>query</code> element is "text"
  * (default for SPARQL queries), or "xml" (useful if you PUT RDF triples).
+ * Unfortunately, if you use content="xml" you may run into namespace problems.
  * 
  * The optional <code>parse</code> attribute indicates how the response should be parsed.
  * It can be "xml" or "text". Default is "xml". Text will be wrapped in an XML element.
