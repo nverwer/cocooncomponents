@@ -64,6 +64,7 @@ public class ZipFileGenerator extends ServiceableGenerator {
     String systemId = this.inputSource.getURI();
     ZipFile zipFile = null;
     InputSource zipEntryInputSource = null;
+    SAXParser parser = null;
     try {
       zipFile = new ZipFile(systemId.replaceFirst("^file:", ""), Charset.forName("UTF-8"));
       ZipEntry zipEntry = zipFile.getEntry(entryName);
@@ -71,10 +72,14 @@ public class ZipFileGenerator extends ServiceableGenerator {
       zipEntryInputSource = new InputSource(zipFile.getInputStream(zipEntry));
       zipEntryInputSource.setSystemId(systemId);
       zipEntryInputSource.setEncoding("UTF-8");
+      parser = (SAXParser) manager.lookup(SAXParser.ROLE);
+      parser.parse(zipEntryInputSource, super.xmlConsumer);
     } catch (ZipException e) {
       throw new ProcessingException(e);
     } catch (IOException e) {
       throw new ProcessingException(e);
+    } catch (ServiceException e) {
+      throw new ProcessingException("Exception during parsing source.", e);
     } finally {
       if (zipFile != null) {
         try {
@@ -82,16 +87,6 @@ public class ZipFileGenerator extends ServiceableGenerator {
         } catch (IOException e) {
         }
       }
-    }
-    SAXParser parser = null;
-    try {
-      parser = (SAXParser) manager.lookup(SAXParser.ROLE);
-      parser.parse(zipEntryInputSource, super.xmlConsumer);
-    } catch (SourceException e) {
-      throw SourceUtil.handle(e);
-    } catch (ServiceException e) {
-      throw new ProcessingException("Exception during parsing source.", e);
-    } finally {
       manager.release(parser);
     }
   }
