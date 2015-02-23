@@ -61,25 +61,26 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    */
   @Override
   public void generate() throws SAXException, ProcessingException {
-      try {
-          String systemId = this.directorySource.getURI();
-          // This relies on systemId being of the form "file://..."
-          File directoryFile = new File(new URL(systemId).getFile());
-          if (!directoryFile.isFile()) {
-              throw new ResourceNotFoundException(super.source + " is not a file.");
-          }
-
-          this.contentHandler.startDocument();
-          this.contentHandler.startPrefixMapping(PREFIX, URI);
-
-          Stack ancestors = getAncestors(directoryFile);
-          addAncestorPath(directoryFile, ancestors);
-
-          this.contentHandler.endPrefixMapping(PREFIX);
-          this.contentHandler.endDocument();
-      } catch (IOException ioe) {
-          throw new ResourceNotFoundException("Could not read directory " + super.source, ioe);
+    try {
+      String systemId = this.directorySource.getURI();
+      // This relies on systemId being of the form "file://..."
+      File directoryFile = new File(new URL(systemId).getFile());
+      if (!directoryFile.isFile()) {
+        throw new ResourceNotFoundException(super.source + " is not a file.");
       }
+
+      this.contentHandler.startDocument();
+      this.contentHandler.startPrefixMapping(PREFIX, URI);
+
+      Stack ancestors = getAncestors(directoryFile);
+      addAncestorPath(directoryFile, ancestors);
+
+      this.contentHandler.endPrefixMapping(PREFIX);
+      this.contentHandler.endDocument();
+    } catch (IOException ioe) {
+      throw new ResourceNotFoundException("Could not read directory "
+          + super.source, ioe);
+    }
   }
 
   /**
@@ -96,14 +97,46 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
     startNode(DIR_NODE_NAME, path);
     if (depth > 0) {
       ZipFile zipfile = null;
-      List<ZipEntry> contents = new ArrayList<ZipEntry>();
       try {
         zipfile = new ZipFile(path, Charset.forName("UTF-8"));
-        //int numEntries = zipfile.size();
-        //List<? extends ZipEntry> contents = Collections.list(zipfile.entries());
         Enumeration<? extends ZipEntry> entries = zipfile.entries();
+        List<ZipEntry> contents = new ArrayList<ZipEntry>();
         while (entries.hasMoreElements()) {
           contents.add((ZipEntry)entries.nextElement());
+        }
+        if (sort.equals("name")) {
+          Collections.sort(contents, new Comparator<ZipEntry>() {
+            public int compare(ZipEntry o1, ZipEntry o2) {
+              if (reverse) {
+                return o2.getName().compareTo(o1.getName());
+              }
+              return o1.getName().compareTo(o2.getName());
+            }
+          });
+        } else if (sort.equals("size")) {
+          Collections.sort(contents, new Comparator<ZipEntry>() {
+            public int compare(ZipEntry o1, ZipEntry o2) {
+              if (reverse) {
+                return new Long(o2.getSize()).compareTo(new Long(o1.getSize()));
+              }
+              return new Long(o1.getSize()).compareTo(new Long(o2.getSize()));
+            }
+          });
+        } else if (sort.equals("lastmodified")) {
+          Collections.sort(contents, new Comparator<ZipEntry>() {
+            public int compare(ZipEntry o1, ZipEntry o2) {
+              if (reverse) {
+                return new Long(o2.getTime()).compareTo(new Long(o1.getTime()));
+              }
+              return new Long(o1.getTime()).compareTo(new Long(o2.getTime()));
+            }
+          });
+        }
+        for (int i = 0; i < contents.size(); i++) {
+          if (isIncluded(contents.get(i)) && !isExcluded(contents.get(i))) {
+            startNode(FILE_NODE_NAME, contents.get(i));
+            endNode(FILE_NODE_NAME);
+          }
         }
       } catch (ZipException e) {
         throw new SAXException(e);
@@ -116,64 +149,8 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
           } catch (IOException e) {
           }
         }
-      }
-
-      if (sort.equals("name")) {
-        Collections.sort(contents, new Comparator<ZipEntry>() {
-          public int compare(ZipEntry o1, ZipEntry o2) {
-            if (reverse) {
-              return o2.getName().compareTo(o1.getName());
-            }
-            return o1.getName().compareTo(o2.getName());
-          }
-        });
-              } else if (sort.equals("size")) {
-        Collections.sort(contents, new Comparator<ZipEntry>() {
-          public int compare(ZipEntry o1, ZipEntry o2) {
-            if (reverse) {
-              return new Long(o2.getSize()).compareTo(new Long(o1.getSize()));
-            }
-            return new Long(o1.getSize()).compareTo(new Long(o2.getSize()));
-          }
-        });
-      } else if (sort.equals("lastmodified")) {
-        Collections.sort(contents, new Comparator<ZipEntry>() {
-          public int compare(ZipEntry o1, ZipEntry o2) {
-            if (reverse) {
-              return new Long(o2.getTime()).compareTo(new Long(o1.getTime()));
-            }
-            return new Long(o1.getTime()).compareTo(new Long(o2.getTime()));
-          }
-        });
-//              } else if (sort.equals("directory")) {
-//                Collections.sort(contents, new Comparator() {
-//                      public int compare(Object o1, Object o2) {
-//                          File f1 = (File)o1;
-//                          File f2 = (File)o2;
-//
-//                          if (reverse) {
-//                              if (f2.isDirectory() && f1.isFile())
-//                                  return -1;
-//                              if (f2.isFile() && f1.isDirectory())
-//                                  return 1;
-//                              return f2.getName().compareTo(f1.getName());
-//                          }
-//                          if (f2.isDirectory() && f1.isFile())
-//                              return 1;
-//                          if (f2.isFile() && f1.isDirectory())
-//                              return -1;
-//                          return f1.getName().compareTo(f2.getName());
-//                      }
-//                  });
-      }
-
-      for (int i = 0; i < contents.size(); i++) {
-        if (isIncluded(contents.get(i)) && !isExcluded(contents.get(i))) {
-          startNode(FILE_NODE_NAME, contents.get(i));
-          endNode(FILE_NODE_NAME);
-        }
-      }
-    }
+      } // finally
+    } // if depth > 0
     endNode(DIR_NODE_NAME);
   }
 
