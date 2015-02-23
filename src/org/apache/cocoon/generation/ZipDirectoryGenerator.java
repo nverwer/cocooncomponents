@@ -95,20 +95,27 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
   protected void addPath(File path, int depth) throws SAXException {
     startNode(DIR_NODE_NAME, path);
     if (depth > 0) {
-      ZipFile zipfile;
+      ZipFile zipfile = null;
+      List<ZipEntry> contents = new ArrayList<ZipEntry>();
       try {
         zipfile = new ZipFile(path, Charset.forName("UTF-8"));
+        //int numEntries = zipfile.size();
+        //List<? extends ZipEntry> contents = Collections.list(zipfile.entries());
+        Enumeration<? extends ZipEntry> entries = zipfile.entries();
+        while (entries.hasMoreElements()) {
+          contents.add((ZipEntry)entries.nextElement());
+        }
       } catch (ZipException e) {
         throw new SAXException(e);
       } catch (IOException e) {
         throw new SAXException(e);
-      }
-      int numEntries = zipfile.size();
-      //List<? extends ZipEntry> contents = Collections.list(zipfile.entries());
-      List<ZipEntry> contents = new ArrayList<ZipEntry>();
-      Enumeration<? extends ZipEntry> entries = zipfile.entries();
-      while (entries.hasMoreElements()) {
-        contents.add((ZipEntry)entries.nextElement());
+      } finally {
+        if (zipfile != null) {
+          try {
+            zipfile.close();
+          } catch (IOException e) {
+          }
+        }
       }
 
       if (sort.equals("name")) {
