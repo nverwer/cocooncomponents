@@ -62,20 +62,27 @@ public class ZipFileGenerator extends ServiceableGenerator {
   @Override
   public void generate() throws IOException, SAXException, ProcessingException {
     String systemId = this.inputSource.getURI();
-    ZipFile zipFile;
-    ZipEntry zipEntry;
+    ZipFile zipFile = null;
+    InputSource zipEntryInputSource = null;
     try {
       zipFile = new ZipFile(systemId.replaceFirst("^file:", ""), Charset.forName("UTF-8"));
-      zipEntry = zipFile.getEntry(entryName);
+      ZipEntry zipEntry = zipFile.getEntry(entryName);
       if (zipEntry == null) throw new ProcessingException(systemId+" does not contain the entry "+entryName);
+      zipEntryInputSource = new InputSource(zipFile.getInputStream(zipEntry));
+      zipEntryInputSource.setSystemId(systemId);
+      zipEntryInputSource.setEncoding("UTF-8");
     } catch (ZipException e) {
       throw new ProcessingException(e);
     } catch (IOException e) {
       throw new ProcessingException(e);
+    } finally {
+      if (zipFile != null) {
+        try {
+          zipFile.close();
+        } catch (IOException e) {
+        }
+      }
     }
-    final InputSource zipEntryInputSource = new InputSource(zipFile.getInputStream(zipEntry));
-    zipEntryInputSource.setSystemId(systemId);
-    zipEntryInputSource.setEncoding("UTF-8");
     SAXParser parser = null;
     try {
       parser = (SAXParser) manager.lookup(SAXParser.ROLE);
@@ -86,7 +93,6 @@ public class ZipFileGenerator extends ServiceableGenerator {
       throw new ProcessingException("Exception during parsing source.", e);
     } finally {
       manager.release(parser);
-      zipFile.close();
     }
   }
 
