@@ -61,6 +61,8 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    */
   @Override
   public void generate() throws SAXException, ProcessingException {
+    this.contentHandler.startDocument();
+    this.contentHandler.startPrefixMapping(PREFIX, URI);
     try {
       String systemId = this.directorySource.getURI();
       // This relies on systemId being of the form "file://..."
@@ -68,19 +70,13 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
       if (!directoryFile.isFile()) {
         throw new ResourceNotFoundException(super.source + " is not a file.");
       }
-
-      this.contentHandler.startDocument();
-      this.contentHandler.startPrefixMapping(PREFIX, URI);
-
       Stack ancestors = getAncestors(directoryFile);
       addAncestorPath(directoryFile, ancestors);
-
-      this.contentHandler.endPrefixMapping(PREFIX);
-      this.contentHandler.endDocument();
     } catch (IOException ioe) {
-      throw new ResourceNotFoundException("Could not read directory "
-          + super.source, ioe);
+      throw new ResourceNotFoundException("Could not read directory " + super.source, ioe);
     }
+    this.contentHandler.endPrefixMapping(PREFIX);
+    this.contentHandler.endDocument();
   }
 
   /**

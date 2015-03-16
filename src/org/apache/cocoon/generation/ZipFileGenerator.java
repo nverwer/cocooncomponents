@@ -21,7 +21,8 @@ import org.xml.sax.SAXException;
 /**
  * The standard FileGenerator can read zipfiles with the jar:file: protocol.
  * Unfortunately, it locks them and does not release the lock.
- * In 10 years since http://mail-archives.apache.org/mod_mbox/cocoon-dev/200408.mbox/%3C20040831142711.52874.qmail@web61204.mail.yahoo.com%3E,
+ * In 10 years since
+ *   http://mail-archives.apache.org/mod_mbox/cocoon-dev/200408.mbox/%3C20040831142711.52874.qmail@web61204.mail.yahoo.com%3E,
  * nobody has solved that.
  * So I decided to write a ZipFileGenerator instead.
  * @author Rakensi
@@ -34,6 +35,7 @@ public class ZipFileGenerator extends ServiceableGenerator {
   
   private Source inputSource;
   private String entryName;
+  private String note;
 
   /**
    * Setup the file generator.
@@ -57,6 +59,7 @@ public class ZipFileGenerator extends ServiceableGenerator {
     } catch (SourceException se) {
       throw SourceUtil.handle("Error during resolving of '" + src + "'.", se);
     }
+    note = par.getParameter("note", "");
   }
 
   @Override
@@ -66,6 +69,7 @@ public class ZipFileGenerator extends ServiceableGenerator {
     InputSource zipEntryInputSource = null;
     SAXParser parser = null;
     try {
+      if (note.length() > 0) System.out.println("Opening zipfile "+systemId+" "+note);
       zipFile = new ZipFile(systemId.replaceFirst("^file:", ""), Charset.forName("UTF-8"));
       ZipEntry zipEntry = zipFile.getEntry(entryName);
       if (zipEntry == null) throw new ProcessingException(systemId+" does not contain the entry "+entryName);
@@ -81,13 +85,16 @@ public class ZipFileGenerator extends ServiceableGenerator {
     } catch (ServiceException e) {
       throw new ProcessingException("Exception during parsing source.", e);
     } finally {
+      if (note.length() > 0) System.out.println("Closing zipfile "+systemId+" "+note);
       if (zipFile != null) {
         try {
           zipFile.close();
         } catch (IOException e) {
         }
       }
-      manager.release(parser);
+      if (parser != null) {
+        manager.release(parser);
+      }
     }
   }
 

@@ -24,7 +24,7 @@ import org.apache.excalibur.source.SourceResolver;
  * 
  *    &lt;map:select type="resource-modified"&gt;
  *       &lt;map:parameter name="src" value="this_resource"/&gt;
- *       &lt;map:when test="&amp;lt;< 1 hour"&gt;
+ *       &lt;map:when test="&amp;lt; 1 hour"&gt;
  *           What to do if the this_resource was modified before one hour ago.
  *       &lt;/map:when&gt;
  *       &lt;map:when test="&amp;gt;2days"&gt;
