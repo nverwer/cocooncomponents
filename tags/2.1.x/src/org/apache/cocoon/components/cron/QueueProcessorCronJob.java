@@ -322,7 +322,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         int completedTasks = 0;
         DateTime jobStartedAt = new DateTime();
 
-        writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
+        writeProcessorStatus(jobConfig.name, null, jobStartedAt, totalTasks, completedTasks);
 
         int availableProcessors = Runtime.getRuntime().availableProcessors();
         int maxConcurrent = jobConfig.maxConcurrent;
@@ -369,6 +369,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         
         while (!threadPool.isTerminated() && !interrupted && completedTasks < totalTasks) {
             Future<CocoonTaskRunner> f = null;
+            Task task = null;
             try {
                 if (this.getLogger().isDebugEnabled()) {
                     this.getLogger().debug("Retrieving next finished task.");
@@ -381,7 +382,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                     if (this.getLogger().isDebugEnabled()) {
                         this.getLogger().debug("Got finished task.");
                     }
-                    Object o = f.get();
+                    CocoonTaskRunner ctr = f.get();
+                    task = ctr.task;
                 }
             } catch (ExecutionException eex) {
                 this.getLogger().error("Received ExecutionException for task, ignoring, continuing with other tasks: ex = " + eex.getMessage());
@@ -396,7 +398,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             if (this.getLogger().isInfoEnabled()) {
                 this.getLogger().info("Tasks completed: " + completedTasks + "/" + totalTasks);
             }
-            writeProcessorStatus(jobConfig.name, jobStartedAt, totalTasks, completedTasks);
+            writeProcessorStatus(jobConfig.name, task, jobStartedAt, totalTasks, completedTasks);
         }
         if (interrupted) {
             threadPool.shutdownNow();
@@ -512,7 +514,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
                     FileUtils.cleanDirectory(processingDir);
 
-                    writeProcessorStatus(jobFileName, new DateTime(), 0, 0);
+                    writeProcessorStatus(jobFileName, null, new DateTime(), 0, 0);
 
                     if (this.getLogger().isDebugEnabled()) {
                         this.getLogger().debug(String.format("Processing job \"%s\" in queue \"%s\"", jobFileName, queueDir));
@@ -632,14 +634,15 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param completedTasks
      * @param currentTaskStartedAt
      */
-    private synchronized void writeProcessorStatus(String jobName, DateTime started, int totalTasks, int completedTasks) {
+    private synchronized void writeProcessorStatus(String jobName, Task task, DateTime started, int totalTasks, int completedTasks) {
         File pStatusFile = new File(this.queuePath, PROCESSOR_STATUS_FILE);
-        String status = String.format("<processor id=\"%s\" job-name=\"%s\" started=\"%s\" tasks=\"%d\" tasks-completed=\"%d\"/>",
+        String status = String.format("<processor id=\"%s\" job-name=\"%s\" started=\"%s\" tasks=\"%d\" tasks-completed=\"%d\" completed-task-uri=\"%s\"/>",
                 Thread.currentThread().getId(),
                 jobName,
                 started.toString(),
                 totalTasks,
-                completedTasks);
+                completedTasks,
+                null == task ? "none" : task.uri);
         try {
             FileUtils.writeStringToFile(pStatusFile, status, "UTF-8");
         } catch (IOException ex) {
