@@ -39,7 +39,7 @@ import org.xml.sax.SAXException;
  * one task using the job-uri attribute and the job-name and job-description
  * attributes.
  * <p>
- * This transformer triggers for element in the namespace "http://apache.org/cocoon/quartz/1.0".
+ * This transformer triggers for elements in the namespace "http://apache.org/cocoon/quartz/1.0".
  * <p>
  * Example XML input:
  * <p>
@@ -114,7 +114,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
             throws ProcessingException, IOException, SAXException {
         if (name.equals(LIST_ELEMENT)) {
         }
-        if (name.equals(ADD_ELEMENT)) {
+        else if (name.equals(ADD_ELEMENT)) {
             this.uri = getAttribute(attr, JOBURI_ATTR, null);
             if (this.uri == null) {
                 throw new ProcessingException("The " + JOBURI_ATTR + " attribute is mandatory for " + ADD_ELEMENT + " elements.");
@@ -131,12 +131,13 @@ public class QuartzTransformer extends AbstractSAXTransformer {
             this.jobName = getAttribute(attr, JOBNAME_ATTR, null);
             this.jobDescription = getAttribute(attr, JOBDESCRIPTION_ATTR, null);
         }
-        if (name.equals(DELETE_ELEMENT)) {
+        else if (name.equals(DELETE_ELEMENT)) {
             this.name = getAttribute(attr, NAME_ATTR, null);
             if (this.name == null) {
                 throw new ProcessingException("The " + NAME_ATTR + " attribute is mandatory for " + DELETE_ELEMENT + " elements.");
             }
         }
+        else super.startTransformingElement(uri, name, raw, attr);
     }
 
     public void endTransformingElement(String uri, String name, String raw)
@@ -148,7 +149,7 @@ public class QuartzTransformer extends AbstractSAXTransformer {
                 Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
-        if (name.equals(ADD_ELEMENT)) {
+        else if (name.equals(ADD_ELEMENT)) {
             try {
                 addCronJob();
             } catch (ParseException ex) {
@@ -157,13 +158,14 @@ public class QuartzTransformer extends AbstractSAXTransformer {
                 Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
-        if (name.equals(DELETE_ELEMENT)) {
+        else if (name.equals(DELETE_ELEMENT)) {
             try {
                 deleteCronJob(this.name);
             } catch (ServiceException ex) {
                 Logger.getLogger(QuartzTransformer.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+        else super.endTransformingElement(uri, name, raw);
     }
 
     /**
