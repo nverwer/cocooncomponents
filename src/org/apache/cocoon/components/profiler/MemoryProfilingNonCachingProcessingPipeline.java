@@ -121,4 +121,46 @@ public class MemoryProfilingNonCachingProcessingPipeline
     }
   }
 
+  /**
+   * Process the SAX event pipeline
+   */
+  protected boolean processXMLPipeline(Environment environment) throws ProcessingException {
+    if (this.data == null) this.data = new ProfilerData();
+    if (this.data!=null) {
+      // Capture environment info
+      this.data.setEnvironmentInfo(new EnvironmentInfo(environment));
+      // Execute pipeline
+      this.initMemoryMeasurement();
+      boolean result = super.processXMLPipeline(environment);
+      this.data.setTotalTime(this.getMemoryMeasurement());
+      // Report
+      profiler.addResult(environment.getURI()+" (pipeline)", this.data);
+      return result;
+    } else {
+      getLogger().warn("Profiler Data does not have any components to measure");
+       return super.processXMLPipeline(environment);
+    }
+  }
+  
+  /**
+   * Process the pipeline using a reader.
+   */
+  protected boolean processReader(Environment environment) throws ProcessingException {
+    if (this.data == null) this.data = new ProfilerData();
+    if (this.data != null) {
+      // Capture environment info
+      this.data.setEnvironmentInfo(new EnvironmentInfo(environment));
+      // Execute pipeline
+      this.initMemoryMeasurement();
+      boolean result = super.processReader(environment);
+      this.data.setTotalTime(this.getMemoryMeasurement());
+      // Report
+      profiler.addResult(environment.getURI()+" (reader)", this.data);
+      return result;
+    } else {
+      getLogger().warn("Profiler Data does not have any components to measure");
+      return super.processReader(environment);
+    }
+  }
+
 }
