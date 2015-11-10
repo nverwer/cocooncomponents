@@ -11,6 +11,9 @@
  *   http://xml.org/sax/features/external-parameter-entities : false
  *   http://apache.org/xml/features/nonvalidating/load-external-dtd : false
  * The validate parameter still exists. It is false by default because it implies reading the DTD.
+ * The entity resolver is always set to one that forbids external entities.
+ * 
+ * In order to use this parser, in cocoon.xconf the xml-parser/@class must contain "org.apache.cocoon.components.parser.JaxpSafeParser".
  */
 
 package org.apache.cocoon.components.parser;
@@ -20,6 +23,7 @@ import java.io.IOException;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.FactoryConfigurationError;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParserFactory;
 
@@ -41,6 +45,7 @@ import org.xml.sax.ContentHandler;
 import org.xml.sax.ErrorHandler;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+import org.xml.sax.SAXNotSupportedException;
 import org.xml.sax.SAXParseException;
 import org.xml.sax.XMLReader;
 import org.xml.sax.ext.LexicalHandler;
@@ -69,9 +74,6 @@ implements SAXParser, DOMParser, Poolable, Component, Parameterizable, Serviceab
   /** do we stop on recoverable errors ? */
   private boolean m_stopOnRecoverableError;
 
-  /** the hint to the entity resolver */
-  private String m_resolverHint;
-
   /** the Document Builder factory */
   private DocumentBuilderFactory m_docFactory;
 
@@ -90,16 +92,10 @@ implements SAXParser, DOMParser, Poolable, Component, Parameterizable, Serviceab
   public void service( final ServiceManager manager ) throws ServiceException {
     m_manager = manager;
     if( manager.hasService( EntityResolver.ROLE ) ) {
-      if ( m_resolverHint != null ) {
-        // select the configured resolver
-        m_resolver = (EntityResolver)manager.lookup( EntityResolver.ROLE + "/" + m_resolverHint );
-      } else {
-        // use default resolver
-        m_resolver = (EntityResolver)manager.lookup( EntityResolver.ROLE );
-      }
-      if(getLogger().isDebugEnabled())
-        getLogger().debug( "JaxpParser: Using EntityResolver: " + m_resolver );
+      getLogger().warn("Ignoring entityResolver role = "+EntityResolver.ROLE);
     }
+    getLogger().info("Using safe resolver.");
+    m_resolver = new SafeEntityResolver();
   }
 
   /*
@@ -122,76 +118,56 @@ implements SAXParser, DOMParser, Poolable, Component, Parameterizable, Serviceab
     m_stopOnWarning = params.getParameterAsBoolean( "stop-on-warning", true );
     m_stopOnRecoverableError = params.getParameterAsBoolean( "stop-on-recoverable-error", true );
     m_dropDtdComments = params.getParameterAsBoolean( "drop-dtd-comments", false );
-    m_resolverHint = params.getParameter( "resolver-hint", null );
     // Get the SAXFactory to obtain a SAX based parser to parse XML documents.
     final String saxParserFactoryName = params.getParameter( "sax-parser-factory", "javax.xml.parsers.SAXParserFactory" );
     if( "javax.xml.parsers.SAXParserFactory".equals( saxParserFactoryName ) ) {
       m_factory = SAXParserFactory.newInstance();
     } else {
       try {
-        final Class<? extends SAXParserFactory> factoryClass = loadClass( saxParserFactoryName );
-        m_factory = (SAXParserFactory)factoryClass.newInstance();
-      } catch( Exception e ) {
+        m_factory = SAXParserFactory.newInstance(saxParserFactoryName, null);
+      } catch( FactoryConfigurationError e ) {
         throw new ParameterException( "Cannot load SAXParserFactory class " + saxParserFactoryName, e );
       }
     }
-System.out.println("************************************************** Hello planet Earth, are you there?");
     m_factory.setNamespaceAware( true );
     m_factory.setValidating( validate );
-    String feature = null;
-    try {
-      feature = "http://xml.org/sax/features/external-parameter-entities";
-      m_factory.setFeature(feature, false);
-      feature = "http://apache.org/xml/features/nonvalidating/load-external-dtd";
-      m_factory.setFeature(feature, false);
-    } catch(Exception e) {
-      getLogger().warn("Feature "+feature+" is not available.");
-    }
-    try {
-      feature = XMLConstants.FEATURE_SECURE_PROCESSING;
-      m_factory.setFeature(feature, true);
-    } catch (Exception e) {
-      throw new ParameterException("Cannot set feature "+feature, e);
-    }
+    trySetFeature(m_factory, "http://xml.org/sax/features/external-parameter-entities", false);
+    trySetFeature(m_factory, "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+    trySetFeature(m_factory, XMLConstants.FEATURE_SECURE_PROCESSING, true);
     // Get the DocumentFactory used to obtain a parser that produces DOM object trees from XML documents.
     final String documentBuilderFactoryName = params.getParameter( "document-builder-factory", "javax.xml.parsers.DocumentBuilderFactory" );
     if( "javax.xml.parsers.DocumentBuilderFactory".equals( documentBuilderFactoryName ) ) {
       m_docFactory = DocumentBuilderFactory.newInstance();
     } else {
       try {
-        final Class<? extends DocumentBuilderFactory> factoryClass = loadClass( documentBuilderFactoryName );
-        m_docFactory = (DocumentBuilderFactory)factoryClass.newInstance();
-      } catch( Exception e ) {
+        m_docFactory = DocumentBuilderFactory.newInstance(documentBuilderFactoryName, null);
+      } catch( FactoryConfigurationError e ) {
         throw new ParameterException( "Cannot load DocumentBuilderFactory class " + documentBuilderFactoryName, e );
       }
     }
     m_docFactory.setNamespaceAware( true );
     m_docFactory.setValidating( validate );
+    trySetFeature(m_docFactory, "http://xml.org/sax/features/external-parameter-entities", false);
+    trySetFeature(m_docFactory, "http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+    trySetFeature(m_docFactory, XMLConstants.FEATURE_SECURE_PROCESSING, true);
+  }
+  
+  private void trySetFeature(SAXParserFactory spf, String feature, boolean value) {
+    getLogger().info("Set "+spf.getClass().getName()+" feature "+feature+" : "+value);
     try {
-      feature = "http://xml.org/sax/features/external-parameter-entities";
-      m_factory.setFeature(feature, false);
-      feature = "http://apache.org/xml/features/nonvalidating/load-external-dtd";
-      m_factory.setFeature(feature, false);
+      spf.setFeature(feature, value);
     } catch(Exception e) {
-      getLogger().warn("Feature "+feature+" is not available.");
-    }
-    try {
-      feature = XMLConstants.FEATURE_SECURE_PROCESSING;
-      m_docFactory.setFeature(feature, true);
-    } catch (Exception e) {
-      throw new ParameterException("Cannot set feature "+feature, e);
+      getLogger().warn("Safe parser vulnerability: Feature "+feature+" is not available on SAXParserFactory.");
     }
   }
-
-  /**
-   * Load a class
-   */
-  private Class loadClass( String name ) throws Exception {
-    ClassLoader loader = Thread.currentThread().getContextClassLoader();
-    if( loader == null ) {
-      loader = getClass().getClassLoader();
+  
+  private void trySetFeature(DocumentBuilderFactory dbf, String feature, boolean value) {
+    getLogger().info("Set "+dbf.getClass().getName()+" feature "+feature+" : "+value);
+    try {
+      dbf.setFeature(feature, value);
+    } catch(Exception e) {
+      getLogger().warn("Safe parser vulnerability: Feature "+feature+" is not available on DocumentBuilderFactory.");
     }
-    return loader.loadClass( name );
   }
 
   /**
@@ -387,6 +363,19 @@ System.out.println("************************************************** Hello pla
     public void comment (char ch[], int start, int length) throws SAXException {
       if (!inDTD)
         next.comment(ch, start, length);
+    }
+  }
+  
+  /**
+   * This entity resolver completely disallows external entities.
+   * This is very secure, but a bit limiting.
+   */
+  private class SafeEntityResolver implements EntityResolver {
+    @Override
+    public InputSource resolveEntity(String publicId, String systemId) throws SAXException, IOException {
+      String message = "For security reasons, external entities are not allowed. Ignoring "+systemId;
+      getLogger().error(message);
+      throw new SAXNotSupportedException(message);
     }
   }
 
