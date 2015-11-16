@@ -17,6 +17,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.Boolean;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
@@ -175,6 +179,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     private static final String outDirName = "out";
     private static final String errorDirName = "error";
 
+    private static final String STOP_JOB_FILENAME = "stop-job.xml";
+
     private File queuePath;
 
     /**
@@ -257,23 +263,33 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         private final org.apache.avalon.framework.logger.Logger logger;
         private final OutputStream os;
         private final int sequenceNumber;
+        private final int numThreads;
 
-        public CocoonTaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger, OutputStream os, int sequenceNumber) {
+        public CocoonTaskRunner(Task t, SourceResolver resolver, org.apache.avalon.framework.logger.Logger logger,
+                                OutputStream os, int sequenceNumber, int numThreads) {
             this.task = t;
             this.resolver = resolver;
             this.logger = logger;
             this.os = os;
             this.sequenceNumber = sequenceNumber;
+            this.numThreads = numThreads;
         }
 
         @Override
         public void doRun() {
             try {
+
+                long threadId = Thread.currentThread().getId() % numThreads + 1;
+
+                logger.info("Thread " + threadId + " of " + numThreads + " starting.");
+
                 Document doc = DOMUtil.createDocument();
 
                 Element taskNode = doc.createElement("task");
 
-                taskNode.setAttribute("id", sequenceNumber + "");
+                taskNode.setAttribute("id", task.id + "");
+
+                taskNode.setAttribute("seq", sequenceNumber + "");
 
                 taskNode.setAttribute("uri", task.uri);
 
@@ -306,6 +322,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param currentJob The current job file.
      */
     private void processCurrentJobConcurrently(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException {
+        ExecutorService threadPool;
+
         if (this.getLogger().isInfoEnabled()) {
             this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
         }
@@ -324,7 +342,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
         writeProcessorStatus(jobConfig.name, null, jobStartedAt, totalTasks, completedTasks);
 
-        int availableProcessors = Runtime.getRuntime().availableProcessors();
+        // This is good default for I/O intensive tasks, though on some systems it can be much higher.
+        // For computer intensive tasks, use Runtime.getRuntime().availableProcessors() + 1.
+        int availableProcessors = Runtime.getRuntime().availableProcessors() * 2;
         int maxConcurrent = jobConfig.maxConcurrent;
         int maxThreads = 1; // default nr of threads
         if (maxConcurrent <= 0) {
@@ -337,12 +357,15 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         } else {
             // Use specified maximum, but only if it is no more than what's
             // available.
-            maxThreads = maxConcurrent;
-            //if (maxConcurrent > availableProcessors) {
-            //    maxThreads = availableProcessors;
-            //}
+            if (maxConcurrent > availableProcessors) {
+                maxThreads = availableProcessors;
+            }
         }
-        ExecutorService threadPool = Executors.newFixedThreadPool(maxThreads);
+        if (1 == maxThreads) {
+            threadPool = Executors.newSingleThreadExecutor();
+        } else {
+            threadPool = Executors.newFixedThreadPool(maxThreads);
+        }
         if (this.getLogger().isInfoEnabled()) {
             this.getLogger().info("Using " + maxThreads + " threads to execute " + totalTasks + " tasks.");
         }
@@ -357,7 +380,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
         int submittedTasks = 0;
         for (Task t : jobConfig.tasks) {
-            CocoonTaskRunner taskRunner = new CocoonTaskRunner(t, resolver, this.getLogger(), os, ++submittedTasks);
+            CocoonTaskRunner taskRunner = new CocoonTaskRunner(t, resolver, this.getLogger(),
+                    os, ++submittedTasks, maxThreads);
             jobExecutor.submit(taskRunner, taskRunner);
         }
         if (this.getLogger().isDebugEnabled()) {
@@ -377,7 +401,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 f = jobExecutor.poll(TASK_TIMEOUT, TimeUnit.MILLISECONDS);
                 if (null == f) {
                     this.getLogger().error("Failed getting next finished task (TASK_TIMEOUT (=" + TASK_TIMEOUT + ")), quitting.");
-                    interrupted = true;
+                    // interrupted = true;
                 } else {
                     if (this.getLogger().isDebugEnabled()) {
                         this.getLogger().debug("Got finished task.");
@@ -399,15 +423,53 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 this.getLogger().info("Tasks completed: " + completedTasks + "/" + totalTasks);
             }
             writeProcessorStatus(jobConfig.name, task, jobStartedAt, totalTasks, completedTasks);
+            if (!interrupted) {
+                interrupted = externallyInterrupted();
+                if (interrupted) {
+                    this.getLogger().info("Current job interrupted by stop file.");
+                }
+            }
+            if (interrupted) {
+                if (this.getLogger().isInfoEnabled()) {
+                    this.getLogger().info("Calling threadPool.shutdownNow().");
+                }
+                threadPool.shutdownNow();
+                break;
+            }
         }
-        if (interrupted) {
-            threadPool.shutdownNow();
-        }
+//        if (interrupted) {
+//            if (this.getLogger().isInfoEnabled()) {
+//                this.getLogger().info("Calling threadPool.shutdownNow().");
+//            }
+//            threadPool.shutdownNow();
+//        }
         
         writeOutputStream(os, "</tasks>");
         os.close();
         this.manager.release(resolver);
     }
+
+
+    /**
+     * Return true if there's a file called "stop-job.txt" in the "in"-folder, false otherwise.
+     * @return boolean
+     */
+    Boolean externallyInterrupted() {
+        this.getLogger().info("Checking for stop-file.");
+        return Files.exists(stopFile());
+    }
+
+
+    /**
+     * Return File object for stop-file. May exist, may not exist.
+     * @return File object for stop-file.
+     */
+    Path stopFile() {
+        String stopFilename = this.queuePath + "/" + processingDirName + "/" + STOP_JOB_FILENAME;
+        return Paths.get(stopFilename);
+    }
+
+
 
     /**
      * Process the URL in one Task. All errors are caught, if one task goes bad
@@ -503,9 +565,14 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             }
         } else {
             // No job being processed.
+
             File jobFile = getOldestJobFile(inDir);
 
             if (jobFile != null) {
+
+                // First delete any old stop-file if present.
+                this.getLogger().info("Deleting stop-file " + stopFile());
+                Files.deleteIfExists(stopFile());
 
                 String jobFileName = jobFile.getName();
                 File currentJob = new File(processingDir, jobFileName);
