@@ -1,11 +1,11 @@
 package org.apache.cocoon.generation;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
-import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.avalon.framework.service.ServiceException;
@@ -25,13 +25,14 @@ import org.xml.sax.SAXException;
  *   http://mail-archives.apache.org/mod_mbox/cocoon-dev/200408.mbox/%3C20040831142711.52874.qmail@web61204.mail.yahoo.com%3E,
  * nobody has solved that.
  * So I decided to write a ZipFileGenerator instead.
+ * It can read streaming zip-files, so now you can use sources like jar:http://... not just jar:file://...!
  * @author Rakensi
  *
  */
 public class ZipFileGenerator extends ServiceableGenerator {
 
   /** Constant for the jar protocol. */
-  private static final String JARFILE = "jar:file:";
+  private static final String JARFILE = "jar:";
   
   private Source inputSource;
   private String entryName;
@@ -45,7 +46,7 @@ public class ZipFileGenerator extends ServiceableGenerator {
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters par)
       throws ProcessingException, SAXException, IOException {
     if (!src.startsWith(JARFILE))
-      throw new ProcessingException(src + " does not denote a zip-file (use the jar:file: protocol)");
+      throw new ProcessingException(src + " does not denote a zip-file (use the "+JARFILE+" protocol)");
     src = src.substring(JARFILE.length()); // remove protocol
     entryName = null;
     int entryIndex = src.indexOf("!/");
@@ -65,32 +66,32 @@ public class ZipFileGenerator extends ServiceableGenerator {
   @Override
   public void generate() throws IOException, SAXException, ProcessingException {
     String systemId = this.inputSource.getURI();
-    ZipFile zipFile = null;
-    InputSource zipEntryInputSource = null;
+    InputStream sourceInput = this.inputSource.getInputStream();
+    ZipInputStream zipInput = new ZipInputStream(sourceInput, Charset.forName("UTF-8"));
+    boolean foundEntry = false;
     SAXParser parser = null;
     try {
-      if (note.length() > 0) System.out.println("Opening zipfile "+systemId+" "+note);
-      zipFile = new ZipFile(systemId.replaceFirst("^file:", ""), Charset.forName("UTF-8"));
-      ZipEntry zipEntry = zipFile.getEntry(entryName);
-      if (zipEntry == null) throw new ProcessingException(systemId+" does not contain the entry "+entryName);
-      zipEntryInputSource = new InputSource(zipFile.getInputStream(zipEntry));
-      zipEntryInputSource.setSystemId(systemId);
-      zipEntryInputSource.setEncoding("UTF-8");
-      parser = (SAXParser) manager.lookup(SAXParser.ROLE);
-      parser.parse(zipEntryInputSource, super.xmlConsumer);
-    } catch (ZipException e) {
-      throw new ProcessingException(e);
-    } catch (IOException e) {
-      throw new ProcessingException(e);
-    } catch (ServiceException e) {
-      throw new ProcessingException("Exception during parsing source.", e);
-    } finally {
-      if (note.length() > 0) System.out.println("Closing zipfile "+systemId+" "+note);
-      if (zipFile != null) {
-        try {
-          zipFile.close();
-        } catch (IOException e) {
+      if (note.length() > 0) getLogger().info("Opening zipfile "+systemId+" "+note);
+      ZipEntry zipEntry;
+      while (!foundEntry && (zipEntry = zipInput.getNextEntry()) != null) {
+        if (zipEntry.getName().equals(entryName)) {
+          foundEntry = true;
+          InputSource zipEntryInputSource = new InputSource(zipInput);
+          zipEntryInputSource.setSystemId(systemId);
+          zipEntryInputSource.setEncoding("UTF-8");
+          parser = (SAXParser) manager.lookup(SAXParser.ROLE);
+          parser.parse(zipEntryInputSource, super.xmlConsumer);
+        } else {
+          zipInput.closeEntry();
         }
+      }
+      if (!foundEntry) throw new ProcessingException(systemId+" does not contain the entry "+entryName);
+    } catch (ServiceException e) {
+      throw new ProcessingException("Exception during parsing zip-source.", e);
+    } finally {
+      if (note.length() > 0) getLogger().info("Closing zipfile "+systemId+" "+note);
+      if (zipInput != null) {
+        zipInput.close();
       }
       if (parser != null) {
         manager.release(parser);
