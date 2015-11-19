@@ -23,7 +23,7 @@
   <property name="lib" location="lib"/>
   <property name="build" location="build"/>
   <property name="apidoc" location="apidoc"/>
-  <property name="jarfile" location="BeValueCocoonComponents.jar"/>
+  <property name="jarfile" location="EssentialCocoonComponents.jar"/>
 
   <target name="init">
     <mkdir dir="${build}"/>
