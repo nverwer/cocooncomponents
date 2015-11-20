@@ -44,7 +44,9 @@
   </target>
 
   <target name="jar" depends="compile" description="generate the jar-file" >
-    <jar jarfile="${jarfile}" basedir="${build}"/>
+    <jar jarfile="${jarfile}" basedir="${build}">
+      <metainf dir="." includes="**/LICENSE.txt" /> 
+    </jar>
   </target>
 
   <target name="install" depends="jar" description="install into Cocoon">
