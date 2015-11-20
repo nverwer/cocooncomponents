@@ -44,7 +44,9 @@
   </target>
 
   <target name="jar" depends="compile" description="generate the jar-file" >
-    <jar jarfile="${jarfile}" basedir="${build}"/>
+    <jar jarfile="${jarfile}" basedir="${build}">
+      <metainf dir="." includes="**/LICENSE.txt" /> 
+    </jar>
   </target>
 
   <target name="install" depends="jar" description="install into Cocoon">
@@ -64,8 +66,8 @@
              version="true"
              use="true"
              windowtitle="Cocoon components">
-      <doctitle><![CDATA[<h1>Cocoon components</h1>]]></doctitle>
-      <bottom><![CDATA[<i>http://code.google.com/p/cocooncomponents/</i>]]></bottom>
+      <doctitle><![CDATA[<h1>Essential Cocoon Components</h1>]]></doctitle>
+      <bottom><![CDATA[<i>https://github.com/nverwer/cocooncomponents</i>]]></bottom>
     </javadoc>
   </target>
 
