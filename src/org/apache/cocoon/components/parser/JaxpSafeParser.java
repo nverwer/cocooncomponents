@@ -152,21 +152,35 @@ implements SAXParser, DOMParser, Poolable, Component, Parameterizable, Serviceab
     trySetFeature(m_docFactory, XMLConstants.FEATURE_SECURE_PROCESSING, true);
   }
   
+  /** 
+   * Set a feature on the parser. This is used to set features that increase security.
+   * If that is not possible, it means that the parser will be vulnerable.
+   * @param spf
+   * @param feature
+   * @param value
+   */
   private void trySetFeature(SAXParserFactory spf, String feature, boolean value) {
     getLogger().info("Set "+spf.getClass().getName()+" feature "+feature+" : "+value);
     try {
       spf.setFeature(feature, value);
     } catch(Exception e) {
-      getLogger().warn("Safe parser vulnerability: Feature "+feature+" is not available on SAXParserFactory.");
+      getLogger().error("Safe parser vulnerability: Feature "+feature+" is not available on SAXParserFactory.");
     }
   }
   
+  /**
+   * Set a feature on the document builder. This is used to set features that increase security.
+   * If that is not possible, it means that the parser will be vulnerable.
+   * @param dbf
+   * @param feature
+   * @param value
+   */
   private void trySetFeature(DocumentBuilderFactory dbf, String feature, boolean value) {
     getLogger().info("Set "+dbf.getClass().getName()+" feature "+feature+" : "+value);
     try {
       dbf.setFeature(feature, value);
     } catch(Exception e) {
-      getLogger().warn("Safe parser vulnerability: Feature "+feature+" is not available on DocumentBuilderFactory.");
+      getLogger().error("Safe parser vulnerability: Feature "+feature+" is not available on DocumentBuilderFactory.");
     }
   }
 
