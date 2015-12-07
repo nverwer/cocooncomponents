@@ -4,7 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 
-import org.apache.avalon.excalibur.io.FileUtil;
+import org.apache.commons.io.FileUtils;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
@@ -79,7 +79,7 @@ public class CopyFilesTransformer extends AbstractTransformer {
     if (outfile != null && outfile.exists()) {
       try {
         // Also deletes subdirs
-        FileUtil.forceDelete(outfile);
+        FileUtils.forceDelete(outfile);
       } catch (Exception ignore) {
         getLogger().error("Could not overwrite target file: " + target, ignore);
       }
@@ -87,7 +87,7 @@ public class CopyFilesTransformer extends AbstractTransformer {
     if (file != null && outfile != null && file.exists()) {
       try {
         // File to file or file to dir copy
-        FileUtil.copyFile(file, outfile);
+        FileUtils.copyFile(file, outfile);
       } catch (Exception ignore) {
         getLogger().error("Could not copy file " + name + " to " + target, ignore);
       }
