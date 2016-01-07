@@ -3,6 +3,8 @@ package org.apache.cocoon.transformation;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.xml.transform.OutputKeys;
 
@@ -10,6 +12,7 @@ import org.apache.avalon.framework.parameters.ParameterException;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 
@@ -59,7 +62,25 @@ public class SerializationTransformer extends AbstractSAXPipelineTransformer {
       throws ProcessingException, IOException, SAXException {
     if (name.equals(serializeElementTag)) {
       String serialized = endSerializedXMLRecording();
-      sendTextEvent(serialized);
+      /* Unescape XML numeric character entities. */
+      Pattern xmlEntityRegex = Pattern.compile("&#(x?)([0-9a-fA-F]+);");
+      Matcher xmlEntityMatcher = xmlEntityRegex.matcher(serialized);
+      StringBuffer unescaped = new StringBuffer(serialized.length());
+      while (xmlEntityMatcher.find()) {
+        String hexadecimal = xmlEntityMatcher.group(1);
+        String entityCode = xmlEntityMatcher.group(2);
+        int code;
+        if (hexadecimal == null || hexadecimal.length() == 0) {
+          code = Integer.parseInt(entityCode);
+        } else {
+          code = Integer.parseInt(entityCode, 16);
+        }
+        String entity = Character.toString((char) code);
+        xmlEntityMatcher.appendReplacement(unescaped, entity);
+      }
+      xmlEntityMatcher.appendTail(unescaped);
+      /* Insert the unescaped text. */
+      sendTextEvent(unescaped.toString());
       sendEndElementEventNS(name);
     } else  {
       super.endTransformingElement(uri, name, raw);
