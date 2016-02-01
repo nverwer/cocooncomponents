@@ -103,7 +103,7 @@ import org.xml.sax.SAXException;
  * @author Nico Verwer (nverwer@rakensi.com)
  *
  */
-public class SparqlTransformer extends AbstractSAXTransformer {
+public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   
   public static final String SPARQL_NAMESPACE_URI = "http://apache.org/cocoon/sparql/1.0";
   public static final String HTTP_NAMESPACE_URI ="http://www.w3.org/2006/http#";
@@ -157,6 +157,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       showErrors = getAttribute(attr, SHOW_ERRORS_ATTR, "true").charAt(0) == 't';
       requestParameters = new SourceParameters();
       httpHeaders = new HashMap();
+      // Process other attributes.
       for (int i = 0; i < attr.getLength(); ++i) {
         if (attr.getURI(i).equals(HTTP_NAMESPACE_URI)) {
           httpHeaders.put(attr.getLocalName(i), attr.getValue(i));
@@ -256,10 +257,10 @@ public class SparqlTransformer extends AbstractSAXTransformer {
         if (showErrors) {
           AttributesImpl attrs = new AttributesImpl();
           attrs.addCDATAAttribute("status", ""+responseCode);
-          xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error", attrs);
+          xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
           String responseBody = httpMethod.getStatusText(); //httpMethod.getResponseBodyAsString();
           xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
-          xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error");
+          xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
           return; // Not a nice, but quick and dirty way to end.
         } else {
           throw new ProcessingException("Received HTTP status code "+responseCode+" "+httpMethod.getStatusText()+":\n"+httpMethod.getResponseBodyAsString());
@@ -268,19 +269,19 @@ public class SparqlTransformer extends AbstractSAXTransformer {
       // Parse the response
       if (responseCode == 204) { // No content.
         String statusLine = httpMethod.getStatusLine().toString();
-        xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result", EMPTY_ATTRIBUTES);
+        xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
         xmlConsumer.characters(statusLine.toCharArray(), 0, statusLine.length());
-        xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result");
+        xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
       } else if (parse.equalsIgnoreCase("xml")) {
         InputStream responseBodyStream = httpMethod.getResponseBodyAsStream();
         xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
         xmlizer.toSAX(responseBodyStream, "text/xml", httpMethod.getURI().toString(), new IncludeXMLConsumer(xmlConsumer));
         responseBodyStream.close();
       } else if (parse.equalsIgnoreCase("text")) {
-        xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result", EMPTY_ATTRIBUTES);
+        xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
         String responseBody = httpMethod.getResponseBodyAsString();
         xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
-        xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result");
+        xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
       } else {
         throw new ProcessingException("Unknown parse type: "+parse);
       }
