@@ -198,7 +198,6 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         HostConfiguration hostConfiguration = httpclient.getHostConfiguration();
         hostConfiguration.setProxy(System.getProperty("http.proxyHost"), Integer.parseInt(System.getProperty("http.proxyPort")));
         httpclient.setHostConfiguration(hostConfiguration);
-        this.getLogger().warn("USING PROXY: "+httpclient.getHostConfiguration().getProxyHost());
       } catch (Exception e) {
         throw new ProcessingException("Cannot set proxy!", e);
       }
