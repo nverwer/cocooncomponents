@@ -4,7 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 
-import org.apache.avalon.excalibur.io.FileUtil;
+import org.apache.commons.io.FileUtils;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
@@ -25,7 +25,7 @@ public class CopyFilesTransformer extends AbstractTransformer {
 
   // Identifies the namespace used for the copy transformation
   public static final String COPY_FILES_NS =
-    "http://kluwer.nl/cocoon/copy/1.0";
+          "http://kluwer.nl/cocoon/copy/1.0";
 
   // The file element that holds the source
   public static final String FILE_ELEMENT = "file";
@@ -36,13 +36,13 @@ public class CopyFilesTransformer extends AbstractTransformer {
   public static final String TARGET_ATTRIBUTE = "target";
 
   public void setup(SourceResolver resolver, Map objectModel, String src,
-    Parameters par)
-    throws ProcessingException, SAXException, IOException {
+                    Parameters par)
+          throws ProcessingException, SAXException, IOException {
   }
 
   public void startElement(String namespaceURI, String localName,
-    String qName, Attributes attributes)
-    throws SAXException {
+                           String qName, Attributes attributes)
+          throws SAXException {
 
     // If we encounter a file element in our namespace, invoke a copy
     // on the src attribute
@@ -55,7 +55,7 @@ public class CopyFilesTransformer extends AbstractTransformer {
   }
 
   public void endElement(String namespaceURI, String localName, String qName)
-    throws SAXException {
+          throws SAXException {
 
     if (COPY_FILES_NS.equals(namespaceURI) && FILE_ELEMENT.equals(localName)) {
       ; // Do nothing here since we want to remove this element.
@@ -79,7 +79,7 @@ public class CopyFilesTransformer extends AbstractTransformer {
     if (outfile != null && outfile.exists()) {
       try {
         // Also deletes subdirs
-        FileUtil.forceDelete(outfile);
+        FileUtils.forceDelete(outfile);
       } catch (Exception ignore) {
         getLogger().error("Could not overwrite target file: " + target, ignore);
       }
@@ -87,7 +87,7 @@ public class CopyFilesTransformer extends AbstractTransformer {
     if (file != null && outfile != null && file.exists()) {
       try {
         // File to file or file to dir copy
-        FileUtil.copyFile(file, outfile);
+        FileUtils.copyFile(file, outfile);
       } catch (Exception ignore) {
         getLogger().error("Could not copy file " + name + " to " + target, ignore);
       }

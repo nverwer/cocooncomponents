@@ -192,6 +192,16 @@ public class SparqlTransformer extends AbstractSAXTransformer {
   private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
+    if (System.getProperty("http.proxyHost") != null) {
+      try {
+        HostConfiguration hostConfiguration = httpclient.getHostConfiguration();
+        hostConfiguration.setProxy(System.getProperty("http.proxyHost"), Integer.parseInt(System.getProperty("http.proxyPort")));
+        httpclient.setHostConfiguration(hostConfiguration);
+        this.getLogger().warn("USING PROXY: "+httpclient.getHostConfiguration().getProxyHost());
+      } catch (Exception e) {
+        throw new ProcessingException("Cannot set proxy!", e);
+      }
+    }
     HttpMethod httpMethod = null;
     // Do not use empty query parameter.
     if (requestParameters.getParameter(parameterName).trim().equals("")) {
