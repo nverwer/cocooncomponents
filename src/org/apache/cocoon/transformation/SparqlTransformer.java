@@ -190,16 +190,30 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     }
   }
 
+  //-Dhttp.nonProxyHosts=10.*|localhost|62.112.232.245
   private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
     if (System.getProperty("http.proxyHost") != null) {
-      try {
-        HostConfiguration hostConfiguration = httpclient.getHostConfiguration();
-        hostConfiguration.setProxy(System.getProperty("http.proxyHost"), Integer.parseInt(System.getProperty("http.proxyPort")));
-        httpclient.setHostConfiguration(hostConfiguration);
-      } catch (Exception e) {
-        throw new ProcessingException("Cannot set proxy!", e);
+  getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
+      String nonProxyHostsRE = System.getProperty("http.nonProxyHosts", "");
+      if (nonProxyHostsRE.length() > 0) {
+        String[] pHosts = nonProxyHostsRE.replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*").split("\\|");
+        nonProxyHostsRE = "";
+        for (String pHost : pHosts) {
+          nonProxyHostsRE += "|^https?://"+pHost;
+        }
+        nonProxyHostsRE = nonProxyHostsRE.substring(1);
+      }
+  getLogger().warn("NONPROXY RE: "+nonProxyHostsRE);
+      if (nonProxyHostsRE.length() == 0 || !url.matches(nonProxyHostsRE)) {
+        try {
+          HostConfiguration hostConfiguration = httpclient.getHostConfiguration();
+          hostConfiguration.setProxy(System.getProperty("http.proxyHost"), Integer.parseInt(System.getProperty("http.proxyPort", "80")));
+          httpclient.setHostConfiguration(hostConfiguration);
+        } catch (Exception e) {
+          throw new ProcessingException("Cannot set proxy!", e);
+        }
       }
     }
     HttpMethod httpMethod = null;
