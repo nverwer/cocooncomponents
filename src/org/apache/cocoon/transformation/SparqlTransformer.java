@@ -201,7 +201,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         String[] pHosts = nonProxyHostsRE.replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*").split("\\|");
         nonProxyHostsRE = "";
         for (String pHost : pHosts) {
-          nonProxyHostsRE += "|^https?://"+pHost;
+          nonProxyHostsRE += "|(^https?://"+pHost+".*$)";
         }
         nonProxyHostsRE = nonProxyHostsRE.substring(1);
       }
