@@ -192,7 +192,7 @@ public class SparqlTransformer extends AbstractSAXTransformer {
   private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
-    
+
     HttpMethod httpMethod = null;
     // Do not use empty query parameter.
     if (requestParameters.getParameter(parameterName).trim().equals("")) {
