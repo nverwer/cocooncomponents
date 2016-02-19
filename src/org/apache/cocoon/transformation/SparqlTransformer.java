@@ -103,7 +103,7 @@ import org.xml.sax.SAXException;
  * @author Nico Verwer (nverwer@rakensi.com)
  *
  */
-public class SparqlTransformer extends AbstractSAXPipelineTransformer {
+public class SparqlTransformer extends AbstractSAXTransformer {
 
   public static final String SPARQL_NAMESPACE_URI = "http://apache.org/cocoon/sparql/1.0";
   public static final String HTTP_NAMESPACE_URI ="http://www.w3.org/2006/http#";
@@ -132,7 +132,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   }
 
   public void setup(SourceResolver resolver, Map objectModel, String src,
-                    Parameters params) throws ProcessingException, SAXException, IOException {
+      Parameters params) throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectModel, src, params);
     inQuery = false;
   }
@@ -142,7 +142,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   }
 
   public void startTransformingElement(String uri, String name, String raw, Attributes attr)
-          throws ProcessingException, IOException, SAXException {
+      throws ProcessingException, IOException, SAXException {
     if (name.equals(QUERY_ELEMENT)) {
       if (inQuery) {
         throw new ProcessingException("Nested SPARQL queries are not allowed.");
@@ -157,7 +157,6 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       showErrors = getAttribute(attr, SHOW_ERRORS_ATTR, "true").charAt(0) == 't';
       requestParameters = new SourceParameters();
       httpHeaders = new HashMap();
-      // Process other attributes.
       for (int i = 0; i < attr.getLength(); ++i) {
         if (attr.getURI(i).equals(HTTP_NAMESPACE_URI)) {
           httpHeaders.put(attr.getLocalName(i), attr.getValue(i));
@@ -176,7 +175,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   }
 
   public void endTransformingElement(String uri, String name, String raw)
-          throws ProcessingException, IOException, SAXException {
+      throws ProcessingException, IOException, SAXException {
     if (name.equals(QUERY_ELEMENT)) {
       inQuery = false;
       String query = null;
@@ -190,32 +189,10 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     }
   }
 
-  //-Dhttp.nonProxyHosts=10.*|localhost|62.112.232.245
   private void executeRequest(String url, String method, Map httpHeaders, SourceParameters requestParameters)
-          throws ProcessingException, IOException, SAXException {
+      throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
-    if (System.getProperty("http.proxyHost") != null) {
-      // getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
-      String nonProxyHostsRE = System.getProperty("http.nonProxyHosts", "");
-      if (nonProxyHostsRE.length() > 0) {
-        String[] pHosts = nonProxyHostsRE.replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*").split("\\|");
-        nonProxyHostsRE = "";
-        for (String pHost : pHosts) {
-          nonProxyHostsRE += "|(^https?://"+pHost+".*$)";
-        }
-        nonProxyHostsRE = nonProxyHostsRE.substring(1);
-      }
-      // getLogger().warn("NONPROXY RE: "+nonProxyHostsRE);
-      if (nonProxyHostsRE.length() == 0 || !url.matches(nonProxyHostsRE)) {
-        try {
-          HostConfiguration hostConfiguration = httpclient.getHostConfiguration();
-          hostConfiguration.setProxy(System.getProperty("http.proxyHost"), Integer.parseInt(System.getProperty("http.proxyPort", "80")));
-          httpclient.setHostConfiguration(hostConfiguration);
-        } catch (Exception e) {
-          throw new ProcessingException("Cannot set proxy!", e);
-        }
-      }
-    }
+    
     HttpMethod httpMethod = null;
     // Do not use empty query parameter.
     if (requestParameters.getParameter(parameterName).trim().equals("")) {
@@ -232,7 +209,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     } else if ("POST".equalsIgnoreCase(method)) {
       PostMethod httpPostMethod = new PostMethod(url);
       if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
-              ((String)httpHeaders.get(HTTP_CONTENT_TYPE)).startsWith("application/x-www-form-urlencoded")) {
+          ((String)httpHeaders.get(HTTP_CONTENT_TYPE)).startsWith("application/x-www-form-urlencoded")) {
         // Encode parameters in POST body.
         Iterator parNames = requestParameters.getParameterNames();
         while (parNames.hasNext()) {
@@ -280,10 +257,10 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         if (showErrors) {
           AttributesImpl attrs = new AttributesImpl();
           attrs.addCDATAAttribute("status", ""+responseCode);
-          xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
+          xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error", attrs);
           String responseBody = httpMethod.getStatusText(); //httpMethod.getResponseBodyAsString();
           xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
-          xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
+          xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "error", "sparql:error");
           return; // Not a nice, but quick and dirty way to end.
         } else {
           throw new ProcessingException("Received HTTP status code "+responseCode+" "+httpMethod.getStatusText()+":\n"+httpMethod.getResponseBodyAsString());
@@ -292,27 +269,27 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       // Parse the response
       if (responseCode == 204) { // No content.
         String statusLine = httpMethod.getStatusLine().toString();
-        xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
+        xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result", EMPTY_ATTRIBUTES);
         xmlConsumer.characters(statusLine.toCharArray(), 0, statusLine.length());
-        xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
+        xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result");
       } else if (parse.equalsIgnoreCase("xml")) {
         InputStream responseBodyStream = httpMethod.getResponseBodyAsStream();
         xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
         xmlizer.toSAX(responseBodyStream, "text/xml", httpMethod.getURI().toString(), new IncludeXMLConsumer(xmlConsumer));
         responseBodyStream.close();
       } else if (parse.equalsIgnoreCase("text")) {
-        xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
+        xmlConsumer.startElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result", EMPTY_ATTRIBUTES);
         String responseBody = httpMethod.getResponseBodyAsString();
         xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
-        xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
+        xmlConsumer.endElement("http://apache.org/cocoon/sparql/1.0", "result", "sparql:result");
       } else {
         throw new ProcessingException("Unknown parse type: "+parse);
       }
     } catch (ServiceException e) {
       throw new ProcessingException("Cannot find the right XMLizer for "+XMLizer.ROLE, e);
     } finally {
-      if (xmlizer != null) manager.release((Component) xmlizer);
-      httpMethod.releaseConnection();
+        if (xmlizer != null) manager.release((Component) xmlizer);
+        httpMethod.releaseConnection();
     }
   }
 
