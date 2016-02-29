@@ -195,7 +195,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
     if (System.getProperty("http.proxyHost") != null) {
-  getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
+  // getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
       String nonProxyHostsRE = System.getProperty("http.nonProxyHosts", "");
       if (nonProxyHostsRE.length() > 0) {
         String[] pHosts = nonProxyHostsRE.replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*").split("\\|");
@@ -205,7 +205,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         }
         nonProxyHostsRE = nonProxyHostsRE.substring(1);
       }
-  getLogger().warn("NONPROXY RE: "+nonProxyHostsRE);
+  // getLogger().warn("NONPROXY RE: "+nonProxyHostsRE);
       if (nonProxyHostsRE.length() == 0 || !url.matches(nonProxyHostsRE)) {
         try {
           HostConfiguration hostConfiguration = httpclient.getHostConfiguration();
