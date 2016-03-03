@@ -1,16 +1,15 @@
 package org.apache.cocoon.transformation;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.text.Normalizer;
 import java.util.Map;
 
-import org.apache.avalon.framework.parameters.ParameterException;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
-
-import com.rakensi.trie.AsciiUtils;
 
 /**
  * Transform strings inside the trigger-tags into low ASCII, removing accents, diacritics, etcetera.
@@ -75,11 +74,26 @@ public class NormalizeToASCIITransformer extends AbstractSAXPipelineTransformer 
   @Override
   public void characters(char[] text, int start, int length) throws SAXException {
     if (this.normalize > 0) {
-      text = AsciiUtils.normalize(new String(text, start, length)).toCharArray();
+      text = normalize(new String(text, start, length)).toCharArray();
       super.characters(text, 0, text.length);
     } else {
       super.characters(text, start, length);
     }
+  }
+  
+  // Normalize a string to ASCII [http://stackoverflow.com/a/2097224/1021892].
+  private static String normalize(String s) {
+    s = s.replaceAll("[\u2018`\u2032\u00B4\u2019]", "'")
+         .replaceAll("[\u201C\u201D]", "\"")
+         .replaceAll("[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]",  "-");
+    String sn = Normalizer.normalize(s, Normalizer.Form.NFKD);
+    String sr;
+    try {
+      sr = new String(sn.replaceAll("[\\p{InCombiningDiacriticalMarks}\\p{IsLm}\\p{IsSk}]+", "").getBytes("ascii"), "ascii");
+    } catch (UnsupportedEncodingException e) {
+      throw new RuntimeException(e);
+    }
+    return sr;
   }
 
 }
