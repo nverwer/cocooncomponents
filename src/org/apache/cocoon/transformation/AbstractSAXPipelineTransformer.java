@@ -24,7 +24,7 @@ import org.xml.sax.SAXException;
  * This variation on the AbstractSAXTransformer modifies the sendXYZ methods,
  * so that they send to the next component in the pipeline.
  * Contrary to what you would expect, that is not what the AbstractSAXTransformer does.
- * It also fixes the broken behaviour of endTextRecording().
+ * It also fixes the broken behaviour of TextRecording() and SAXRecording.
  */
 public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
 
@@ -247,21 +247,21 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
   /**
    * Send all start prefix mapping events to the current content handler
    */
-  protected void sendStartPrefixMapping() throws SAXException {
+  protected void sendStartPrefixMapping(String currentPrefix) throws SAXException {
     Map<String, String> prefixAndUris = uniqueNamespacePrefixes();
     for (String prefix : prefixAndUris.keySet()) {
       String uri = prefixAndUris.get(prefix);
-      contentHandler.startPrefixMapping(prefix, uri);
+      if (!prefix.equals(currentPrefix)) contentHandler.startPrefixMapping(prefix, uri);
     }
   }
 
   /**
    * Send all end prefix mapping events to the current content handler
    */
-  protected void sendEndPrefixMapping() throws SAXException {
+  protected void sendEndPrefixMapping(String currentPrefix) throws SAXException {
     Map<String, String> prefixAndUris = uniqueNamespacePrefixes();
     for (String prefix : prefixAndUris.keySet()) {
-      contentHandler.endPrefixMapping(prefix);
+      if (!prefix.equals(currentPrefix)) contentHandler.endPrefixMapping(prefix);
     }
   }
   
@@ -308,13 +308,15 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     }
 
     public void startElement(String namespaceURI, String localName, String qName, Attributes atts) throws SAXException {
-      transformer.sendStartPrefixMapping();
+      String nsPrefix = (qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
+      transformer.sendStartPrefixMapping(nsPrefix);
       saxbits.add(new StartElement(namespaceURI, localName, qName, atts));
     }
 
     public void endElement(String namespaceURI, String localName, String qName) throws SAXException {
+      String nsPrefix = (qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
       saxbits.add(new EndElement(namespaceURI, localName, qName));
-      transformer.sendEndPrefixMapping();
+      transformer.sendEndPrefixMapping(nsPrefix);
     }
     
   }
