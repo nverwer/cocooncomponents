@@ -63,6 +63,7 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
   /** The URI of the text element */
   public static final String DEFAULT_NAMESPACE = "http://chaperon.sourceforge.net/schema/text/1.0";
   public static final String DEFAULT_ELEMENT = "text";
+  public static final String LOCALIZABLE_PARAM = "localizable";
   public static final String ENCODING_PARAM = "encoding";
   public static final String NAMESPACE_PARAM = "namespace";
   public static final String ELEMENT_PARAM = "element";
@@ -100,7 +101,7 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
    */
   public void parameterize(Parameters parameters) throws ParameterException
   {
-    this.localizable = parameters.getParameterAsBoolean("localizable", false);
+    this.localizable = parameters.getParameterAsBoolean(LOCALIZABLE_PARAM, false);
     this.encoding = parameters.getParameter(ENCODING_PARAM, this.encoding);
   }
 
