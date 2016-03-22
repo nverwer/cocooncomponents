@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,7 +25,7 @@ import org.xml.sax.SAXException;
  * This variation on the AbstractSAXTransformer modifies the sendXYZ methods,
  * so that they send to the next component in the pipeline.
  * Contrary to what you would expect, that is not what the AbstractSAXTransformer does.
- * It also fixes the broken behaviour of TextRecording() and SAXRecording.
+ * It also fixes the broken behaviour of TextRecording, SerializedXMLRecording and SAXRecording.
  */
 public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
 
@@ -37,6 +38,13 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
    * The current prefix for our namespace.
    */
   private String ourPrefix;
+  
+  private Stack<List<String>> prefixStack = new Stack<List<String>>();
+  
+  /**
+   * Are we recording SAX events?
+   */
+  private boolean recordingSAX;
 
   /**
    * @see org.apache.cocoon.transformation.AbstractSAXTransformer#setup(org.apache.cocoon.environment.SourceResolver, java.util.Map, java.lang.String, org.apache.avalon.framework.parameters.Parameters)
@@ -45,6 +53,17 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters params) throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectModel, src, params);
     this.ourPrefix = null;
+    this.namespaces.clear();
+    this.recordingSAX = false;
+  }
+
+  /**
+   * @see org.apache.avalon.excalibur.pool.Recyclable#recycle()
+   */
+  public void recycle() {
+      this.ourPrefix = null;
+      this.namespaces.clear();
+      super.recycle();
   }
   
   /**
@@ -58,7 +77,10 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     if (this.namespaceURI.equals(uri)) {
       this.ourPrefix = prefix;
     }
-    super.startPrefixMapping(prefix, uri);
+    if (!this.recordingSAX) {
+      // When recording SAX, we will produce our own prefix mapping events.
+      super.startPrefixMapping(prefix, uri);
+    }
   }
 
   /**
@@ -94,7 +116,10 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
         }
       }
     }
-    super.endPrefixMapping(prefix);
+    if (!this.recordingSAX) {
+      // When recording SAX, we will produce our own prefix mapping events.
+      super.endPrefixMapping(prefix);
+    }
   }
 
   /**
@@ -102,8 +127,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
    * All events are converted to an xml string which can be retrieved by endSerializedXMLRecording.
    * @param format The format for the serialized output. If <CODE>null</CODE> is specified, the default format is used.
    */
-  public void startSerializedXMLRecording(Properties format)
-      throws SAXException {
+  public void startSerializedXMLRecording(Properties format) throws SAXException {
     if (getLogger().isDebugEnabled()) {
       getLogger().debug("Start serialized XML recording. Format=" + format);
     }
@@ -116,8 +140,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
    * @return A string containing the recorded xml information, formatted by
    * the properties passed to the corresponding startSerializedXMLRecording().
    */
-  public String endSerializedXMLRecording()
-  throws SAXException, ProcessingException {
+  public String endSerializedXMLRecording() throws SAXException, ProcessingException {
       XMLizable xml = endSAXRecording();
       String text = XMLUtils.serialize(xml, (Properties) this.stack.pop());
       if (getLogger().isDebugEnabled()) {
@@ -133,10 +156,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
   public void startSAXRecording()
   throws SAXException {
     addRecorder(new NamespacePrefixRepeatingSaxBuffer(this));
-    /* Old version, overridden:
-    addRecorder(new SaxBuffer());
-    sendStartPrefixMapping();
-    */
+    this.recordingSAX = true;
   }
 
   /**
@@ -145,10 +165,21 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
    */
   public XMLizable endSAXRecording()
   throws SAXException {
-    /* Seems to be unnecessary with NamespacePrefixRepeatingSaxBuffer
-    sendEndPrefixMapping();
-    */
+    this.recordingSAX = false;
     return (XMLizable) removeRecorder();
+  }
+
+  /**
+   * Start recording of a text.
+   * No events forwarded, and all characters events
+   * are collected into a string.
+   */
+  public void startTextRecording() throws SAXException {
+      if (getLogger().isDebugEnabled()) {
+          getLogger().debug("Start text recording");
+      }
+      addRecorder(new TextRecorder());
+      sendStartPrefixMapping();
   }
 
   /**
@@ -245,23 +276,28 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
   }
 
   /**
-   * Send all start prefix mapping events to the current content handler
+   * Send start prefix mapping events to the current content handler.
+   * @param prefixes The prefixes for which to send mappings.
+   * @throws SAXException
    */
-  protected void sendStartPrefixMapping(String currentPrefix) throws SAXException {
+  protected void sendAllStartPrefixMapping(List<String> prefixes) throws SAXException {
     Map<String, String> prefixAndUris = uniqueNamespacePrefixes();
-    for (String prefix : prefixAndUris.keySet()) {
+    for (String prefix : prefixes) {
       String uri = prefixAndUris.get(prefix);
-      if (!prefix.equals(currentPrefix)) contentHandler.startPrefixMapping(prefix, uri);
+      contentHandler.startPrefixMapping(prefix, uri);
     }
+    // Remember the prefixes for sendAllEndPrefixMapping.
+    this.prefixStack.push(prefixes);
   }
 
   /**
-   * Send all end prefix mapping events to the current content handler
+   * Send all end prefix mapping events to the current content handler.
+   * @throws SAXException
    */
-  protected void sendEndPrefixMapping(String currentPrefix) throws SAXException {
-    Map<String, String> prefixAndUris = uniqueNamespacePrefixes();
-    for (String prefix : prefixAndUris.keySet()) {
-      if (!prefix.equals(currentPrefix)) contentHandler.endPrefixMapping(prefix);
+  protected void sendAllEndPrefixMapping() throws SAXException {
+    List<String> prefixes = this.prefixStack.pop();
+    for (String prefix : prefixes) {
+      contentHandler.endPrefixMapping(prefix);
     }
   }
   
@@ -298,6 +334,9 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     return sb.toString();
   }
 
+  /**
+   * This SAX buffer sends out namespace prefix mappings for all namespace prefixes that are used by an element.
+   */
   public class NamespacePrefixRepeatingSaxBuffer extends SaxBuffer {
     private static final long serialVersionUID = 1L;
     
@@ -308,15 +347,21 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     }
 
     public void startElement(String namespaceURI, String localName, String qName, Attributes atts) throws SAXException {
-      String nsPrefix = (qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
-      transformer.sendStartPrefixMapping(nsPrefix);
+      // Make a list of unique prefixes used by this element. If the tag has no prefix, guess that no attributes have prefixes.
+      List<String> prefixes = new ArrayList<String>(namespaceURI.length() > 0 ? 4 : 0);
+      if (namespaceURI.length() > 0) prefixes.add(qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
+      for (int i = 0; i < atts.getLength(); ++i) {
+        String name = atts.getQName(i);
+        if (name != null && name.contains(":")) prefixes.add(name.substring(0, name.indexOf(':')));
+      }
+      transformer.sendAllStartPrefixMapping(prefixes);
       saxbits.add(new StartElement(namespaceURI, localName, qName, atts));
     }
 
     public void endElement(String namespaceURI, String localName, String qName) throws SAXException {
       String nsPrefix = (qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
       saxbits.add(new EndElement(namespaceURI, localName, qName));
-      transformer.sendEndPrefixMapping(nsPrefix);
+      transformer.sendAllEndPrefixMapping();
     }
     
   }
