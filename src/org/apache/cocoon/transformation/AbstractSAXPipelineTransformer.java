@@ -352,7 +352,10 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
       if (namespaceURI.length() > 0) prefixes.add(qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
       for (int i = 0; i < atts.getLength(); ++i) {
         String name = atts.getQName(i);
-        if (name != null && name.contains(":")) prefixes.add(name.substring(0, name.indexOf(':')));
+        if (name != null && name.contains(":")) {
+          String prefix = name.substring(0, name.indexOf(':'));
+          if (!prefixes.contains(prefix)) prefixes.add(prefix);
+        }
       }
       transformer.sendAllStartPrefixMapping(prefixes);
       saxbits.add(new StartElement(namespaceURI, localName, qName, atts));
