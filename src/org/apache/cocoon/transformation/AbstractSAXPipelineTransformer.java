@@ -54,6 +54,10 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     super.setup(resolver, objectModel, src, params);
     this.ourPrefix = null;
     this.namespaces.clear();
+    /* The prefix xml is by definition bound to the namespace name http://www.w3.org/XML/1998/namespace.
+     * It MAY, but need not, be declared, and MUST NOT be bound to any other namespace name.
+     * Other prefixes MUST NOT be bound to this namespace name, and it MUST NOT be declared as the default namespace.
+     */
     this.namespaces.add(new String[]{"xml", "http://www.w3.org/XML/1998/namespace"});
     this.recordingSAX = false;
   }
