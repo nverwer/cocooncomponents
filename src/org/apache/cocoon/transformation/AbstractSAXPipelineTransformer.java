@@ -54,6 +54,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     super.setup(resolver, objectModel, src, params);
     this.ourPrefix = null;
     this.namespaces.clear();
+    this.namespaces.add(new String[]{"xml", "http://www.w3.org/XML/1998/namespace"});
     this.recordingSAX = false;
   }
 
