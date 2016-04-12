@@ -40,7 +40,7 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    *
    * @param resolver     the SourceResolver object
    * @param objectModel  a <code>Map</code> containing model object
-   * @param src          the directory to be XMLized specified as src attribute on &lt;map:generate/>
+   * @param src          the directory to be XMLized specified as src attribute on &lt;map:generate/&gt;
    * @param par          configuration parameters
    */
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters par) throws ProcessingException, SAXException, IOException {
@@ -130,8 +130,14 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
         }
         for (int i = 0; i < contents.size(); i++) {
           if (isIncluded(contents.get(i)) && !isExcluded(contents.get(i))) {
-            startNode(FILE_NODE_NAME, contents.get(i));
-            endNode(FILE_NODE_NAME);
+            ZipEntry entry = contents.get(i);
+            if (entry.isDirectory()) {
+              startNode(DIR_NODE_NAME, entry);
+              endNode(DIR_NODE_NAME);
+            } else {
+              startNode(FILE_NODE_NAME, entry);
+              endNode(FILE_NODE_NAME);
+            }
           }
         }
       } catch (ZipException e) {
@@ -171,6 +177,9 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    */
   protected void setNodeAttributes(ZipEntry zipEntry) throws SAXException {
       String fullName = zipEntry.getName();
+      if (zipEntry.isDirectory()) {
+        fullName = fullName.replaceFirst("^(.*/)?([^/]+)/?$", "$2");
+      }
       long lastModified = zipEntry.getTime();
       attributes.clear();
       attributes.addAttribute("", FILENAME_ATTR_NAME, FILENAME_ATTR_NAME, "CDATA", fullName);
