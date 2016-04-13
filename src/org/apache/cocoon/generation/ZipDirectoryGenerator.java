@@ -201,8 +201,10 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
     attributes.addAttribute("", FILENAME_ATTR_NAME, FILENAME_ATTR_NAME, "CDATA", name);
     attributes.addAttribute("", LASTMOD_ATTR_NAME, LASTMOD_ATTR_NAME, "CDATA", Long.toString(lastModified));
     attributes.addAttribute("", DATE_ATTR_NAME, DATE_ATTR_NAME, "CDATA", dateFormatter.format(new Date(lastModified)));
-    attributes.addAttribute("", SIZE_ATTR_NAME, SIZE_ATTR_NAME, "CDATA", Long.toString(zipEntry.getSize()));
-    attributes.addAttribute("", COMP_SIZE_ATTR_NAME, COMP_SIZE_ATTR_NAME, "CDATA", Long.toString(zipEntry.getCompressedSize()));
+    if (!zipEntry.isDirectory()) {
+      attributes.addAttribute("", SIZE_ATTR_NAME, SIZE_ATTR_NAME, "CDATA", Long.toString(zipEntry.getSize()));
+      attributes.addAttribute("", COMP_SIZE_ATTR_NAME, COMP_SIZE_ATTR_NAME, "CDATA", Long.toString(zipEntry.getCompressedSize()));
+    }
     if (this.isRequestedDirectory) {
       attributes.addAttribute("", "sort", "sort", "CDATA", this.sort);
       attributes.addAttribute("", "reverse", "reverse", "CDATA",
