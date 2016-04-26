@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -20,13 +19,8 @@ import java.util.zip.ZipEntry;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.ResourceNotFoundException;
-import org.apache.cocoon.components.source.SourceUtil;
 import org.apache.cocoon.environment.SourceResolver;
-import org.apache.excalibur.source.SourceException;
-import org.apache.regexp.RE;
-import org.apache.regexp.RESyntaxException;
 import org.xml.sax.SAXException;
-import org.xml.sax.helpers.AttributesImpl;
 
 public class ZipDirectoryGenerator extends DirectoryGenerator {
 
@@ -166,7 +160,7 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    * Sets the attributes for a given path. The default method sets attributes
    * for the name of the zipentry and for the last modification time.
    * 
-   * @param path  the file/directory to use when setting attributes
+   * @param zipEntry  the file/directory to use when setting attributes
    * @throws SAXException  if an error occurs while setting the attributes
    */
   protected void setNodeAttributes(ZipEntry zipEntry) throws SAXException {
@@ -201,7 +195,7 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
   /**
    * Determines if a given File shall be excluded from viewing.
    * 
-   * @param ipEntry  the ZipEntry to check
+   * @param zipEntry  the ZipEntry to check
    * @return false if the given ZipEntry shall not be excluded or the exclude Pattern is <code>null</code>,
    *         true otherwise.
    */
