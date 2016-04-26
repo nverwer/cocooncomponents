@@ -129,17 +129,17 @@ public class DownloadTransformer extends AbstractTransformer {
 
         if (null != target && !target.equals("")) {
             targetFile = new File(target);
-            targetFile.mkdirs();
+            // targetFile.getParentFile().mkdirs();
         } else if (null != targetDir && !targetDir.equals("")) {
             targetFile = new File(targetDir);
-            if (!targetFile.getParentFile().exists()) {
-                targetFile.getParentFile().mkdirs();
-            }
         } else {
             String baseName = FilenameUtils.getBaseName(sourceUri);
             String extension = FilenameUtils.getExtension(sourceUri);
 
             targetFile = File.createTempFile(baseName, "." + extension);
+        }
+        if (!targetFile.getParentFile().exists()) {
+            targetFile.getParentFile().mkdirs();
         }
 
         if (null != targetFile) {
@@ -154,12 +154,12 @@ public class DownloadTransformer extends AbstractTransformer {
                 }
                 OutputStream os = new BufferedOutputStream(new FileOutputStream(targetFile));
                 try {
-                    IOUtils.copy(httpMethod.getResponseBodyAsStream(), os);
+                    IOUtils.copyLarge(httpMethod.getResponseBodyAsStream(), os);
                 } finally {
                     os.close();
                 }
             } finally {
-                httpMethod.releaseConnection();
+                    httpMethod.releaseConnection();
             }
         }
         return targetFile;
