@@ -129,7 +129,6 @@ public class DownloadTransformer extends AbstractTransformer {
 
         if (null != target && !target.equals("")) {
             targetFile = new File(target);
-            // targetFile.getParentFile().mkdirs();
         } else if (null != targetDir && !targetDir.equals("")) {
             targetFile = new File(targetDir);
         } else {
