@@ -3,14 +3,18 @@ package org.apache.cocoon.transformation;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Map;
+import java.util.zip.ZipInputStream;
+import java.util.zip.ZipEntry;
 
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
 import org.apache.cocoon.transformation.AbstractTransformer;
+import org.apache.commons.httpclient.HostConfiguration;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.HttpMethod;
 import org.apache.commons.httpclient.methods.GetMethod;
@@ -18,6 +22,7 @@ import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
+import org.xml.sax.helpers.AttributesImpl;
 
 /**
  * This transformer downloads a new file to disk.
@@ -27,25 +32,27 @@ import org.xml.sax.SAXException;
  * @src : the file that should be downloaded
  * @target (optional): path where the file should be stored (includes filename)
  * @target-dir (optional): directory where the file should be stored
+ * @unzip (optional): if "true" then unzip file after downloading.
  * If there is no @target or @target-dir attribute a temporary file is created.
  * <p>
  * Example XML input:
  * <pre>
  * {@code
  *   <download:download src="http://some.server.com/zipfile.zip"
- *                  target="/tmp/zipfile.zip"/>
+ *                  target="/tmp/zipfile.zip" unzip="true"/>
  * }
  * </pre>
  * The @src specifies the file that should be downloaded. The 
- * @target specifies where the file should be stored.
+ * @target specifies where the file should be stored. @unzip is true, so the 
+ * file will be unzipped immediately.
  * <p>
  * The result is
  * <pre>
  * {@code
- *   <download:result>/path/to/file/on/disk</download:result>
+ *   <download:result unzipped="/path/to/unzipped/file/on/disk">/path/to/file/on/disk</download:result>
  * }
  * </pre>
- * or 
+ * (@unzipped is only present when @unzip="true") or 
  * <pre>
  * {@code
  *   <download:error>The error message</download:file>
@@ -84,7 +91,9 @@ public class DownloadTransformer extends AbstractTransformer {
     public static final String SRC_ATTRIBUTE = "src";
     public static final String TARGET_ATTRIBUTE = "target";
     public static final String TARGETDIR_ATTRIBUTE = "target-dir";
-
+    public static final String UNZIP_ATTRIBUTE = "unzip";
+    public static final String UNZIPPED_ATTRIBUTE = "unzipped";
+    
     @SuppressWarnings("rawtypes")
     @Override
     public void setup(SourceResolver sourceResolver, Map model, String src,
@@ -96,10 +105,22 @@ public class DownloadTransformer extends AbstractTransformer {
             String qName, Attributes attributes) throws SAXException {
         if (DOWNLOAD_NS.equals(namespaceURI) && DOWNLOAD_ELEMENT.equals(localName)) {
             try {
-                File downloadedFile
-                        = download(attributes.getValue(SRC_ATTRIBUTE), attributes.getValue(TARGETDIR_ATTRIBUTE), attributes.getValue(TARGET_ATTRIBUTE));
+                File[] downloadResult = download(
+                    attributes.getValue(SRC_ATTRIBUTE), 
+                    attributes.getValue(TARGETDIR_ATTRIBUTE),
+                    attributes.getValue(TARGET_ATTRIBUTE),
+                    attributes.getValue(UNZIP_ATTRIBUTE)
+                );
+                File downloadedFile = downloadResult[0];
+                File unzipDir = downloadResult[1];
+                
                 String absPath = downloadedFile.getCanonicalPath();
-                super.startElement(namespaceURI, RESULT_ELEMENT, qName, attributes);
+                
+                AttributesImpl attrsImpl = new AttributesImpl();
+                if (!("".equals(unzipDir))) {
+                    attrsImpl.addAttribute("", UNZIPPED_ATTRIBUTE, UNZIPPED_ATTRIBUTE, "CDATA", unzipDir.getAbsolutePath());
+                }
+                super.startElement(namespaceURI, RESULT_ELEMENT, qName, attrsImpl);
                 super.characters(absPath.toCharArray(), 0, absPath.length());
                 super.endElement(namespaceURI, RESULT_ELEMENT, qName);
             } catch (Exception e) {
@@ -123,46 +144,137 @@ public class DownloadTransformer extends AbstractTransformer {
         super.endElement(namespaceURI, localName, qName);
     }
 
-    private File download(String sourceUri, String targetDir, String target)
+    private File[] download(String sourceUri, String targetDir, String target, String unzip)
             throws ProcessingException, IOException, SAXException {
         File targetFile = null;
+        File unZipped = null;
 
         if (null != target && !target.equals("")) {
             targetFile = new File(target);
-            targetFile.mkdirs();
         } else if (null != targetDir && !targetDir.equals("")) {
             targetFile = new File(targetDir);
-            if (!targetFile.getParentFile().exists()) {
-                targetFile.getParentFile().mkdirs();
-            }
         } else {
             String baseName = FilenameUtils.getBaseName(sourceUri);
             String extension = FilenameUtils.getExtension(sourceUri);
 
             targetFile = File.createTempFile(baseName, "." + extension);
         }
-
-        if (null != targetFile) {
-            HttpClient httpClient = new HttpClient();
-            httpClient.setConnectionTimeout(5000);
-            httpClient.setTimeout(5000);
-            HttpMethod httpMethod = new GetMethod(sourceUri);
-            try {
-                int responseCode = httpClient.executeMethod(httpMethod);
-                if (responseCode < 200 || responseCode >= 300) {
-                    throw new ProcessingException(String.format("Received HTTP status code %d (%s)", responseCode, httpMethod.getStatusText()));
+        if (!targetFile.getParentFile().exists()) {
+            targetFile.getParentFile().mkdirs();
+        }
+        boolean unzipFile = null != unzip && unzip.equals("true");
+        String absPath = targetFile.getAbsolutePath();
+        String unzipDir = unzipFile ? FilenameUtils.removeExtension(absPath) : "";
+        
+        HttpClient httpClient = new HttpClient();
+        httpClient.setConnectionTimeout(5000);
+        httpClient.setTimeout(5000);
+        
+        if (System.getProperty("http.proxyHost") != null) {
+            // getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
+            String nonProxyHostsRE = System.getProperty("http.nonProxyHosts", "");
+            if (nonProxyHostsRE.length() > 0) {
+                String[] pHosts = nonProxyHostsRE.replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*").split("\\|");
+                nonProxyHostsRE = "";
+                for (String pHost : pHosts) {
+                    nonProxyHostsRE += "|(^https?://" + pHost + ".*$)";
                 }
-                OutputStream os = new BufferedOutputStream(new FileOutputStream(targetFile));
+                nonProxyHostsRE = nonProxyHostsRE.substring(1);
+            }
+            if (nonProxyHostsRE.length() == 0 || !sourceUri.matches(nonProxyHostsRE)) {
                 try {
-                    IOUtils.copy(httpMethod.getResponseBodyAsStream(), os);
-                } finally {
-                    os.close();
+                    HostConfiguration hostConfiguration = httpClient.getHostConfiguration();
+                    hostConfiguration.setProxy(System.getProperty("http.proxyHost"), Integer.parseInt(System.getProperty("http.proxyPort", "80")));
+                    httpClient.setHostConfiguration(hostConfiguration);
+                } catch (Exception e) {
+                    throw new ProcessingException("Cannot set proxy!", e);
                 }
-            } finally {
-                httpMethod.releaseConnection();
             }
         }
-        return targetFile;
-    }
 
+        
+        HttpMethod httpMethod = new GetMethod(sourceUri);
+        try {
+            int responseCode = httpClient.executeMethod(httpMethod);
+            if (responseCode < 200 || responseCode >= 300) {
+                throw new ProcessingException(String.format("Received HTTP status code %d (%s)", responseCode, httpMethod.getStatusText()));
+            }
+            OutputStream os = new BufferedOutputStream(new FileOutputStream(targetFile));
+            try {
+                IOUtils.copyLarge(httpMethod.getResponseBodyAsStream(), os);
+            } finally {
+                os.close();
+            }
+        } finally {
+                httpMethod.releaseConnection();
+        }
+        if (!"".equals(unzipDir)) {
+            unZipped = unZipIt(targetFile, unzipDir);
+        }
+        
+        return new File[] {targetFile, unZipped};
+    }
+    
+    
+    /**
+     * Unzip it
+     * @param zipFile input zip file
+     * @param outputFolder zip file output folder
+     */
+    private File unZipIt(File zipFile, String outputFolder){
+
+    byte[] buffer = new byte[4096];
+    
+    File folder = null;
+
+    try{
+    		
+    	//create output directory is not exists
+    	folder = new File(outputFolder);
+    	if (!folder.exists()){
+    		folder.mkdir();
+    	}
+    		
+         //get the zipped file list entry
+         try ( //get the zip file content
+                 ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
+             //get the zipped file list entry
+             ZipEntry ze = zis.getNextEntry();
+             
+             while(ze!=null){
+                 
+                 String fileName = ze.getName();
+                 File newFile = new File(outputFolder + File.separator + fileName);
+                 
+                 // System.out.println("file unzip : "+ newFile.getAbsoluteFile());
+                 
+                 // create all non existing folders
+                 // else you will hit FileNotFoundException for compressed folder
+                 new File(newFile.getParent()).mkdirs();
+                 
+                 try (FileOutputStream fos = new FileOutputStream(newFile)) {
+                     int len;
+                     while ((len = zis.read(buffer)) > 0) {
+                         fos.write(buffer, 0, len);
+                     }
+                 }
+                 
+//                 if (FilenameUtils.getExtension(fileName).equals("zip")) {
+//                     unZipIt(newFile, FilenameUtils.concat(outputFolder, FilenameUtils.getBaseName(fileName)));
+//                 }
+                 ze = zis.getNextEntry();
+             }
+             
+             zis.closeEntry();
+         }
+    		
+    	// System.out.println("Done unzipping.");
+    		
+        } catch(IOException ex){
+           ex.printStackTrace(); 
+        }
+     
+        return folder;
+    }    
 }
+
