@@ -14,8 +14,8 @@ import org.apache.cocoon.webapps.authentication.user.UserHandler;
 /**
  *  This is an improved version of the authentication and the loggedin action, 
  *  which checks the role of a user if the role parameter is specified.
- *  If the user is not authenticated, a redirect (as in the authentication action) will take place
- *  if the 'redirect' parameter is true. Otherwise, the action will just fail.
+ *  If the user is not authenticated, a redirect (as in the authentication action)
+ *  will take place if the 'redirect' parameter is true. Otherwise, the action will just fail.
  *  If the user is authenticated, but does not have the required role, the action will fail.
  *
  * @deprecated The authentication-fw block is deprecated and will be removed in future versions. But the new auth framework is not documented for Cocoon 2.1.

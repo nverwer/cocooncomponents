@@ -4,6 +4,8 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.text.SimpleDateFormat;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -34,7 +36,7 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    *
    * @param resolver     the SourceResolver object
    * @param objectModel  a <code>Map</code> containing model object
-   * @param src          the directory to be XMLized specified as src attribute on &lt;map:generate/>
+   * @param src          the directory to be XMLized specified as src attribute on &lt;map:generate/&gt;
    * @param par          configuration parameters
    */
   public void setup(SourceResolver resolver, Map objectModel, String src, Parameters par) throws ProcessingException, SAXException, IOException {
@@ -74,60 +76,21 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
   }
 
   /**
-   * Adds a single node to the generated document. If the path is a
-   * directory, and depth is greater than zero, then recursive calls
-   * are made to add nodes for the directory's children.
+   * Adds everything in the zip-file to the generated document.
    * 
-   * @param path   the file/directory to process
-   * @param depth  how deep to scan the directory
+   * @param path   the zip-file to process
+   * @param depth  how deep to scan the directories in the zip-file
    * @throws SAXException  if an error occurs while constructing nodes
    */
   @Override
   protected void addPath(File path, int depth) throws SAXException {
-    startNode(DIR_NODE_NAME, path);
+    List<ZipEntry> contents = new ArrayList<ZipEntry>();
     if (depth > 0) {
       ZipFile zipfile = null;
       try {
         zipfile = new ZipFile(path, Charset.forName("UTF-8"));
         Enumeration<? extends ZipEntry> entries = zipfile.entries();
-        List<ZipEntry> contents = new ArrayList<ZipEntry>();
-        while (entries.hasMoreElements()) {
-          contents.add((ZipEntry)entries.nextElement());
-        }
-        if (sort.equals("name")) {
-          Collections.sort(contents, new Comparator<ZipEntry>() {
-            public int compare(ZipEntry o1, ZipEntry o2) {
-              if (reverse) {
-                return o2.getName().compareTo(o1.getName());
-              }
-              return o1.getName().compareTo(o2.getName());
-            }
-          });
-        } else if (sort.equals("size")) {
-          Collections.sort(contents, new Comparator<ZipEntry>() {
-            public int compare(ZipEntry o1, ZipEntry o2) {
-              if (reverse) {
-                return new Long(o2.getSize()).compareTo(new Long(o1.getSize()));
-              }
-              return new Long(o1.getSize()).compareTo(new Long(o2.getSize()));
-            }
-          });
-        } else if (sort.equals("lastmodified")) {
-          Collections.sort(contents, new Comparator<ZipEntry>() {
-            public int compare(ZipEntry o1, ZipEntry o2) {
-              if (reverse) {
-                return new Long(o2.getTime()).compareTo(new Long(o1.getTime()));
-              }
-              return new Long(o1.getTime()).compareTo(new Long(o2.getTime()));
-            }
-          });
-        }
-        for (int i = 0; i < contents.size(); i++) {
-          if (isIncluded(contents.get(i)) && !isExcluded(contents.get(i))) {
-            startNode(FILE_NODE_NAME, contents.get(i));
-            endNode(FILE_NODE_NAME);
-          }
-        }
+        while (entries.hasMoreElements()) contents.add((ZipEntry)entries.nextElement());
       } catch (ZipException e) {
         throw new SAXException(e);
       } catch (IOException e) {
@@ -141,7 +104,68 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
         }
       } // finally
     } // if depth > 0
+    startNode(DIR_NODE_NAME, path);
+    processZipEntries(contents, "", depth);
     endNode(DIR_NODE_NAME);
+  }
+
+  /**
+   * Generate XML for one level in the zip-file.
+   * @param contents All zip-entries.
+   * @param prefix The prefix at this level, e.g., "" or "root/sub/".
+   * @throws SAXException
+   */
+  private void processZipEntries(List<ZipEntry> contents, String prefix, int depth) throws SAXException {
+    if (depth > 0) {
+      // Get the zip-entries at this level.
+      ArrayList<Map.Entry<String, ZipEntry>> level = new ArrayList<Map.Entry<String, ZipEntry>>();
+      for (ZipEntry entry : contents) {
+        String name = entry.getName();
+        if (name.length() > prefix.length() && name.startsWith(prefix)) { // Entry is below this level.
+          name = name.substring(prefix.length());
+          // Names of files and directories at this level contain no '/' or '/' at the end.
+          if ((name.indexOf('/') + 1) % name.length() == 0) {
+            level.add(new AbstractMap.SimpleImmutableEntry<String, ZipEntry>(name, entry));
+          }
+        }
+      }
+      // Do sorting of the level, if required.
+      if (sort.equals("name")) {
+        Collections.sort(level, new Comparator<Map.Entry<String, ZipEntry>>() {
+          public int compare(Map.Entry<String, ZipEntry> o1, Map.Entry<String, ZipEntry> o2) {
+            return reverse ? o2.getKey().compareTo(o1.getKey())
+                           : o1.getKey().compareTo(o2.getKey());
+          }
+        });
+      } else if (sort.equals("size")) {
+        Collections.sort(level, new Comparator<Map.Entry<String, ZipEntry>>() {
+          public int compare(Map.Entry<String, ZipEntry> o1, Map.Entry<String, ZipEntry> o2) {
+            return reverse ? Long.compare(o2.getValue().getSize(), o1.getValue().getSize())
+                           : Long.compare(o1.getValue().getSize(), o2.getValue().getSize());
+          }
+        });
+      } else if (sort.equals("lastmodified")) {
+        Collections.sort(level, new Comparator<Map.Entry<String, ZipEntry>>() {
+          public int compare(Map.Entry<String, ZipEntry> o1, Map.Entry<String, ZipEntry> o2) {
+            return reverse ? Long.compare(o2.getValue().getTime(), o1.getValue().getTime())
+                           : Long.compare(o1.getValue().getTime(), o2.getValue().getTime()) ;
+          }
+        });
+      }
+      // Output nodes in this level.
+      for (Map.Entry<String, ZipEntry> entry : level) {
+        if (isIncluded(entry.getKey()) && !isExcluded(entry.getKey())) {
+          if (entry.getValue().isDirectory()) {
+            startNode(DIR_NODE_NAME, entry);
+            processZipEntries(contents, entry.getValue().getName(), depth - 1);
+            endNode(DIR_NODE_NAME);
+          } else {
+            startNode(FILE_NODE_NAME, entry);
+            endNode(FILE_NODE_NAME);
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -151,8 +175,8 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    * @param path      the file/directory to use when setting attributes
    * @throws SAXException  if an error occurs while creating the node
    */
-  protected void startNode(String nodeName, ZipEntry path) throws SAXException {
-      setNodeAttributes(path);
+  protected void startNode(String nodeName, Map.Entry<String, ZipEntry> entry) throws SAXException {
+      setNodeAttributes(entry);
       super.contentHandler.startElement(URI, nodeName, PREFIX + ':' + nodeName, attributes);
   }
 
@@ -163,22 +187,26 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    * @param zipEntry  the file/directory to use when setting attributes
    * @throws SAXException  if an error occurs while setting the attributes
    */
-  protected void setNodeAttributes(ZipEntry zipEntry) throws SAXException {
-      String fullName = zipEntry.getName();
-      long lastModified = zipEntry.getTime();
-      attributes.clear();
-      attributes.addAttribute("", FILENAME_ATTR_NAME, FILENAME_ATTR_NAME, "CDATA", fullName);
-      attributes.addAttribute("", LASTMOD_ATTR_NAME, LASTMOD_ATTR_NAME, "CDATA", Long.toString(lastModified));
-      attributes.addAttribute("", DATE_ATTR_NAME, DATE_ATTR_NAME, "CDATA", dateFormatter.format(new Date(lastModified)));
+  protected void setNodeAttributes(Map.Entry<String, ZipEntry> entry) throws SAXException {
+    ZipEntry zipEntry = entry.getValue();
+    String name = entry.getKey();
+    if (zipEntry.isDirectory() && name.charAt(name.length()-1) == '/') name = name.substring(0, name.length()-1);
+    long lastModified = zipEntry.getTime();
+    attributes.clear();
+    attributes.addAttribute("", FILENAME_ATTR_NAME, FILENAME_ATTR_NAME, "CDATA", name);
+    attributes.addAttribute("", LASTMOD_ATTR_NAME, LASTMOD_ATTR_NAME, "CDATA", Long.toString(lastModified));
+    attributes.addAttribute("", DATE_ATTR_NAME, DATE_ATTR_NAME, "CDATA", dateFormatter.format(new Date(lastModified)));
+    if (!zipEntry.isDirectory()) {
       attributes.addAttribute("", SIZE_ATTR_NAME, SIZE_ATTR_NAME, "CDATA", Long.toString(zipEntry.getSize()));
       attributes.addAttribute("", COMP_SIZE_ATTR_NAME, COMP_SIZE_ATTR_NAME, "CDATA", Long.toString(zipEntry.getCompressedSize()));
-      if (this.isRequestedDirectory) {
-          attributes.addAttribute("", "sort", "sort", "CDATA", this.sort);
-          attributes.addAttribute("", "reverse", "reverse", "CDATA",
-                                  String.valueOf(this.reverse));
-          attributes.addAttribute("", "requested", "requested", "CDATA", "true");
-          this.isRequestedDirectory = false;
-      }
+    }
+    if (this.isRequestedDirectory) {
+      attributes.addAttribute("", "sort", "sort", "CDATA", this.sort);
+      attributes.addAttribute("", "reverse", "reverse", "CDATA",
+                              String.valueOf(this.reverse));
+      attributes.addAttribute("", "requested", "requested", "CDATA", "true");
+      this.isRequestedDirectory = false;
+    }
   }
 
   /**
@@ -188,8 +216,8 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    * @return true if the ZipEntry shall be visible or the include Pattern is <code>null</code>,
    *         false otherwise.
    */
-  protected boolean isIncluded(ZipEntry zipEntry) {
-      return (this.includeRE == null) ? true : this.includeRE.match(zipEntry.getName());
+  protected boolean isIncluded(String name) {
+      return (this.includeRE == null) ? true : this.includeRE.match(name);
   }
 
   /**
@@ -199,8 +227,8 @@ public class ZipDirectoryGenerator extends DirectoryGenerator {
    * @return false if the given ZipEntry shall not be excluded or the exclude Pattern is <code>null</code>,
    *         true otherwise.
    */
-  protected boolean isExcluded(ZipEntry zipEntry) {
-      return (this.excludeRE == null) ? false : this.excludeRE.match(zipEntry.getName());
+  protected boolean isExcluded(String name) {
+      return (this.excludeRE == null) ? false : this.excludeRE.match(name);
   }
 
 }
