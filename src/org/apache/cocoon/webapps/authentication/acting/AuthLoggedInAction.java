@@ -18,10 +18,11 @@ import org.apache.cocoon.webapps.authentication.user.UserHandler;
  *  will take place if the 'redirect' parameter is true. Otherwise, the action will just fail.
  *  If the user is authenticated, but does not have the required role, the action will fail.
  *
- * @deprecated The authentication-fw block is deprecated and will be removed in future versions. But the new auth framework is not documented for Cocoon 2.1.
+ * The authentication-fw block is deprecated and will be removed in future versions. But the new auth framework is not documented for Cocoon 2.1.
  */
 public class AuthLoggedInAction extends ServiceableAction implements ThreadSafe {
 
+  @SuppressWarnings("deprecation")
   @Override
   public Map act(Redirector redirector, SourceResolver resolver, 
                  Map objectModel, String source, Parameters par)
@@ -36,6 +37,7 @@ public class AuthLoggedInAction extends ServiceableAction implements ThreadSafe 
       authManager = (AuthenticationManager) this.manager.lookup(AuthenticationManager.ROLE);
       UserHandler handler = authManager.isAuthenticated(handlerName);
       if (handler == null && !testRedirect) {
+        this.getLogger().warn("No authentication handler for "+handlerName);
         map = null;
       } else if (authManager.checkAuthentication(redirector, handlerName, applicationName)) {
         RequestState state = authManager.getState();
@@ -44,10 +46,14 @@ public class AuthLoggedInAction extends ServiceableAction implements ThreadSafe 
           String userRoles = (String)map.get("role");
           if (userRoles == null) userRoles = "";
           if (!userRoles.matches(".*\\b"+roleName+"\\b.*")) {
+            this.getLogger().warn("Not the right role for "+userRoles);
             map = null;
           }
         }
-      } // No else needed, redirection will take care of it.
+      } else {
+        // Redirection will take care of it.
+        this.getLogger().warn("Redirecting for "+handlerName);
+      }
     } finally {
       this.manager.release(authManager);
     }
