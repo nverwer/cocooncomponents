@@ -11,17 +11,22 @@ import org.xml.sax.SAXException;
 public class MessageLoggerTransformer extends AbstractSAXTransformer {
   
   private String message;
+  private String target;
 
   @Override
   public void setup(SourceResolver resolver, Map objectModel, String src,
       Parameters params) throws ProcessingException, SAXException, IOException {
+    target = parameters.getParameter("target", "");
     message = params.getParameter("message", "");
     super.setup(resolver, objectModel, src, params);
   }
 
   @Override
   public void startDocument() throws SAXException {
-    this.getLogger().info(message);
+    if (target.length() == 0 || target.matches(".*\\blog\\b.*"))
+      this.getLogger().info(message);
+    if (target.matches(".*\\bconsole\\b.*"))
+      System.out.println(message);
     super.startDocument();
   }
 

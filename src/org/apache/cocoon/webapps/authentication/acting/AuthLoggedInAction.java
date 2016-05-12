@@ -46,7 +46,7 @@ public class AuthLoggedInAction extends ServiceableAction implements ThreadSafe 
           String userRoles = (String)map.get("role");
           if (userRoles == null) userRoles = "";
           if (!userRoles.matches(".*\\b"+roleName+"\\b.*")) {
-            this.getLogger().warn("Not the right role for "+userRoles);
+            this.getLogger().warn("The role "+roleName+" is not included in ["+userRoles+"]");
             map = null;
           }
         }
