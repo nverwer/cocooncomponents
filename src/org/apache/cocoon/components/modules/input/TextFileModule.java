@@ -32,16 +32,21 @@ public class TextFileModule extends AbstractInputModule implements Composable, T
     @Override
     public Object getAttribute(String name, Configuration modeConf, Map objectModel) throws ConfigurationException {
         String result;
+        Source source = null;
+        InputStream inputStream = null;
         try {
-            Source source = resolver.resolveURI(name);
-            InputStream inputStream = source.getInputStream();
+            source = resolver.resolveURI(name);
+            inputStream = source.getInputStream();
             StringWriter writer = new StringWriter();
             IOUtils.copy(inputStream, writer, encoding);
             result = writer.toString();
         } catch (Exception e) {
             throw new ConfigurationException(e.getMessage(), e);
         } finally {
-            
+            if (inputStream != null)
+              try {
+                inputStream.close();
+              } catch (IOException e) {}
         }
         return result;
     }

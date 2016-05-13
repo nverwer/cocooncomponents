@@ -52,7 +52,7 @@ public class AuthLoggedInAction extends ServiceableAction implements ThreadSafe 
         }
       } else {
         // Redirection will take care of it.
-        this.getLogger().warn("Redirecting for "+handlerName);
+        this.getLogger().warn("Unauthenticated redirection by "+handlerName);
       }
     } finally {
       this.manager.release(authManager);
