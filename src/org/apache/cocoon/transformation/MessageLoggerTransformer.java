@@ -14,10 +14,16 @@ public class MessageLoggerTransformer extends AbstractSAXTransformer {
   private String target;
 
   @Override
-  public void setup(SourceResolver resolver, Map objectModel, String src,
-      Parameters params) throws ProcessingException, SAXException, IOException {
-    target = parameters.getParameter("target", "");
-    message = params.getParameter("message", "");
+  public void setup(SourceResolver resolver, Map objectModel, String src, Parameters params)
+      throws ProcessingException, SAXException, IOException {
+    if (params != null) {
+      target = params.getParameter("target", "");
+      message = params.getParameter("message", "");
+    } else {
+      this.getLogger().warn("No parameters given to MessageLoggerTransformer.");
+      target = "";
+      message = "No message given.";
+    }
     super.setup(resolver, objectModel, src, params);
   }
 
