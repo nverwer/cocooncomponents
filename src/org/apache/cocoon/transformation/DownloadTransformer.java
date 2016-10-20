@@ -92,6 +92,7 @@ public class DownloadTransformer extends AbstractTransformer {
     public static final String TARGET_ATTRIBUTE = "target";
     public static final String TARGETDIR_ATTRIBUTE = "target-dir";
     public static final String UNZIP_ATTRIBUTE = "unzip";
+    public static final String RECURSIVE_UNZIP_ATTRIBUTE = "recursive-unzip";
     public static final String UNZIPPED_ATTRIBUTE = "unzipped";
     
     @SuppressWarnings("rawtypes")
@@ -109,7 +110,8 @@ public class DownloadTransformer extends AbstractTransformer {
                     attributes.getValue(SRC_ATTRIBUTE), 
                     attributes.getValue(TARGETDIR_ATTRIBUTE),
                     attributes.getValue(TARGET_ATTRIBUTE),
-                    attributes.getValue(UNZIP_ATTRIBUTE)
+                    attributes.getValue(UNZIP_ATTRIBUTE),
+                    attributes.getValue(RECURSIVE_UNZIP_ATTRIBUTE)
                 );
                 File downloadedFile = downloadResult[0];
                 File unzipDir = downloadResult[1];
@@ -144,7 +146,7 @@ public class DownloadTransformer extends AbstractTransformer {
         super.endElement(namespaceURI, localName, qName);
     }
 
-    private File[] download(String sourceUri, String targetDir, String target, String unzip)
+    private File[] download(String sourceUri, String targetDir, String target, String unzip, String recursiveUnzip)
             throws ProcessingException, IOException, SAXException {
         File targetFile = null;
         File unZipped = null;
@@ -162,7 +164,8 @@ public class DownloadTransformer extends AbstractTransformer {
         if (!targetFile.getParentFile().exists()) {
             targetFile.getParentFile().mkdirs();
         }
-        boolean unzipFile = null != unzip && unzip.equals("true");
+        boolean unzipFile = (null != unzip && unzip.equals("true")) || 
+                (null != recursiveUnzip && recursiveUnzip.equals("true"));
         String absPath = targetFile.getAbsolutePath();
         String unzipDir = unzipFile ? FilenameUtils.removeExtension(absPath) : "";
         
@@ -209,7 +212,7 @@ public class DownloadTransformer extends AbstractTransformer {
                 httpMethod.releaseConnection();
         }
         if (!"".equals(unzipDir)) {
-            unZipped = unZipIt(targetFile, unzipDir);
+            unZipped = unZipIt(targetFile, unzipDir, recursiveUnzip);
         }
         
         return new File[] {targetFile, unZipped};
@@ -221,7 +224,7 @@ public class DownloadTransformer extends AbstractTransformer {
      * @param zipFile input zip file
      * @param outputFolder zip file output folder
      */
-    private File unZipIt(File zipFile, String outputFolder){
+    private File unZipIt(File zipFile, String outputFolder, String recursiveUnzip){
 
     byte[] buffer = new byte[4096];
     
@@ -236,12 +239,13 @@ public class DownloadTransformer extends AbstractTransformer {
     	}
     		
          //get the zipped file list entry
-         try ( //get the zip file content
-                 ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
+         try (
+             //get the zip file content
+             ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
              //get the zipped file list entry
              ZipEntry ze = zis.getNextEntry();
              
-             while(ze!=null){
+             while(ze != null){
                  
                  String fileName = ze.getName();
                  File newFile = new File(outputFolder + File.separator + fileName);
@@ -259,9 +263,9 @@ public class DownloadTransformer extends AbstractTransformer {
                      }
                  }
                  
-//                 if (FilenameUtils.getExtension(fileName).equals("zip")) {
-//                     unZipIt(newFile, FilenameUtils.concat(outputFolder, FilenameUtils.getBaseName(fileName)));
-//                 }
+                 if ((null != recursiveUnzip && "true".equals(recursiveUnzip)) && FilenameUtils.getExtension(fileName).equals("zip")) {
+                     unZipIt(newFile, FilenameUtils.concat(outputFolder, FilenameUtils.getBaseName(fileName)), recursiveUnzip);
+                 }
                  ze = zis.getNextEntry();
              }
              
