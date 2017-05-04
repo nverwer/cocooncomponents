@@ -16,9 +16,12 @@ import org.apache.cocoon.components.modules.input.InputModuleHelper;
 import org.apache.cocoon.environment.SourceResolver;
 import org.apache.cocoon.transformation.helpers.TextRecorder;
 import org.apache.cocoon.xml.SaxBuffer;
+import org.apache.cocoon.xml.XMLConsumer;
 import org.apache.cocoon.xml.XMLUtils;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.excalibur.xml.sax.XMLizable;
 import org.xml.sax.Attributes;
+import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
 
 /**
@@ -30,21 +33,49 @@ import org.xml.sax.SAXException;
 public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
 
   /**
-   * The namespaces and their prefixes
+   * The namespaces and their prefixes.
+   * Every list item is a 2-item array of prefix and URI.
+   * List items at higher indexes override items with the same prefix at lower indexes.
    */
   private final List<String[]> namespaces = new ArrayList<String[]>(10);
   
   /**
-   * The current prefix for our namespace.
+   * The current prefix for the transforming element namespace of the transformer.
    */
   private String ourPrefix;
   
+  /*
+   * The prefixes emitted by sendAllStartPrefixMapping, to be ended by the next sendAllEndPrefixMapping.
+   */
   private Stack<List<String>> prefixStack = new Stack<List<String>>();
   
   /**
    * Are we recording SAX events?
+   * When recording SAX, we will produce our own prefix mapping events.
    */
   private boolean recordingSAX;
+  
+  /**
+   * Way too simple parser to interpolate input module expressions.
+   * @param value A string, possibly containing input module expressions.
+   * @return The interpolated string.
+   */
+  protected String interpolateModules(String value) {
+    InputModuleHelper imh = new InputModuleHelper();
+    imh.setup(manager);
+    Pattern modulePattern = Pattern.compile("\\{([^\\{\\}:]+):([^\\{\\}]+)\\}");
+    Matcher moduleMatcher = modulePattern.matcher(value);
+    StringBuffer sb = new StringBuffer();
+    while (moduleMatcher.find()) {
+      String moduleName = moduleMatcher.group(1);
+      String accessor = moduleMatcher.group(2);
+      Object moduleValue = imh.getAttribute(objectModel, moduleName, accessor, null);
+      if (moduleValue != null) moduleMatcher.appendReplacement(sb, moduleValue.toString());
+    }
+    moduleMatcher.appendTail(sb);
+    imh.releaseAll();
+    return sb.toString();
+  }
 
   /**
    * @see org.apache.cocoon.transformation.AbstractSAXTransformer#setup(org.apache.cocoon.environment.SourceResolver, java.util.Map, java.lang.String, org.apache.avalon.framework.parameters.Parameters)
@@ -130,28 +161,39 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
   /**
    * Start recording of serialized xml.
    * All events are converted to an xml string which can be retrieved by endSerializedXMLRecording.
-   * @param format The format for the serialized output. If <CODE>null</CODE> is specified, the default format is used.
+   * @param format The format for the serialized output. If <code>null</code> is specified, a very simple format is used.
    */
   public void startSerializedXMLRecording(Properties format) throws SAXException {
     if (getLogger().isDebugEnabled()) {
       getLogger().debug("Start serialized XML recording. Format=" + format);
     }
-    this.stack.push(format == null ? XMLUtils.createPropertiesForXML(false) : format);
-    startSAXRecording();
+    if (format != null) {
+      startSAXRecording();
+    } else {
+      addRecorder(new NamespacePrefixRepeatingSerializingRecorder(this));
+    }
+    this.stack.push(format);
   }
 
   /**
    * Return the serialized xml string.
    * @return A string containing the recorded xml information, formatted by
    * the properties passed to the corresponding startSerializedXMLRecording().
+   * Namespace-prefix declarations are repeated for each element to allow fragments to be taken from the serialized content.
    */
   public String endSerializedXMLRecording() throws SAXException, ProcessingException {
+    Properties format = (Properties) this.stack.pop();
+    String text = null;
+    if (format != null) {
       XMLizable xml = endSAXRecording();
-      String text = XMLUtils.serialize(xml, (Properties) this.stack.pop());
-      if (getLogger().isDebugEnabled()) {
-          getLogger().debug("End serialized XML recording. XML=" + text);
-      }
-      return text;
+      text = XMLUtils.serialize(xml, format);
+    } else {
+      text = ((NamespacePrefixRepeatingSerializingRecorder)removeRecorder()).toString();
+    }
+    if (getLogger().isDebugEnabled()) {
+        getLogger().debug("End serialized XML recording. XML=" + text);
+    }
+    return text;
   }
 
   /**
@@ -176,8 +218,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
 
   /**
    * Start recording of a text.
-   * No events forwarded, and all characters events
-   * are collected into a string.
+   * No events forwarded, and all characters events are collected into a string.
    */
   public void startTextRecording() throws SAXException {
       if (getLogger().isDebugEnabled()) {
@@ -306,6 +347,10 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     }
   }
   
+  /**
+   * A map of namespaces (prefix => URI) currently in use.
+   * @return
+   */
   private Map<String, String> uniqueNamespacePrefixes() {
     Map<String, String> prefixAndUris = new HashMap<String, String>();
     // Go through namespaces in order, so newer declarations for a prefix overwrite older ones.
@@ -316,31 +361,34 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     }
     return prefixAndUris;
   }
-  
-  /**
-   * Way too simple parser to interpolate input module expressions.
-   * @param value A string, possibly containing input module expressions.
-   * @return The interpolated string.
-   */
-  protected String interpolateModules (String value) {
-    InputModuleHelper imh = new InputModuleHelper();
-    imh.setup(manager);
-    Pattern modulePattern = Pattern.compile("\\{([^\\{\\}:]+):([^\\{\\}]+)\\}");
-    Matcher moduleMatcher = modulePattern.matcher(value);
-    StringBuffer sb = new StringBuffer();
-    while (moduleMatcher.find()) {
-      String moduleName = moduleMatcher.group(1);
-      String accessor = moduleMatcher.group(2);
-      Object moduleValue = imh.getAttribute(objectModel, moduleName, accessor, null);
-      if (moduleValue != null) moduleMatcher.appendReplacement(sb, moduleValue.toString());
-    }
-    moduleMatcher.appendTail(sb);
-    imh.releaseAll();
-    return sb.toString();
-  }
 
   /**
-   * This SAX buffer sends out namespace prefix mappings for all namespace prefixes that are used by an element.
+   * Make a list of unique prefixes used by a startElement. If the tag has no prefix, guess that no attributes have prefixes.
+   * @param namespaceURI
+   * @param qName
+   * @param atts
+   * @return
+   */
+  private static List<String> getUsedPrefixes(String namespaceURI, String qName, Attributes atts) {
+    int nrPrefixes = namespaceURI.length() > 0 ? 1 : 0;
+    for (int i = 0; i < atts.getLength(); ++i) {
+      String name = atts.getQName(i);
+      if (name != null && name.contains(":")) ++nrPrefixes;
+    }
+    List<String> prefixes = new ArrayList<String>(nrPrefixes);
+    if (namespaceURI.length() > 0) prefixes.add(qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
+    for (int i = 0; i < atts.getLength(); ++i) {
+      String name = atts.getQName(i);
+      if (name != null && name.contains(":")) {
+        String prefix = name.substring(0, name.indexOf(':'));
+        if (!prefixes.contains(prefix)) prefixes.add(prefix);
+      }
+    }
+    return prefixes;
+  }
+  
+  /**
+   * This SAX buffer repeats namespace prefix mappings for all namespace prefixes that are used by an element.
    */
   public class NamespacePrefixRepeatingSaxBuffer extends SaxBuffer {
     private static final long serialVersionUID = 1L;
@@ -352,16 +400,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     }
 
     public void startElement(String namespaceURI, String localName, String qName, Attributes atts) throws SAXException {
-      // Make a list of unique prefixes used by this element. If the tag has no prefix, guess that no attributes have prefixes.
-      List<String> prefixes = new ArrayList<String>(namespaceURI.length() > 0 ? 4 : 0);
-      if (namespaceURI.length() > 0) prefixes.add(qName.contains(":") ? qName.substring(0, qName.indexOf(':')) : "");
-      for (int i = 0; i < atts.getLength(); ++i) {
-        String name = atts.getQName(i);
-        if (name != null && name.contains(":")) {
-          String prefix = name.substring(0, name.indexOf(':'));
-          if (!prefixes.contains(prefix)) prefixes.add(prefix);
-        }
-      }
+      List<String> prefixes = getUsedPrefixes(namespaceURI, qName, atts);
       transformer.sendAllStartPrefixMapping(prefixes);
       saxbits.add(new StartElement(namespaceURI, localName, qName, atts));
     }
@@ -372,5 +411,96 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
       transformer.sendAllEndPrefixMapping();
     }
     
+  }
+  
+  /**
+   * A recorder that serializes the incoming XML, repeating namespace prefix mappings for all namespace prefixes that are used by an element. 
+   */
+  public class NamespacePrefixRepeatingSerializingRecorder implements XMLConsumer {
+    private AbstractSAXPipelineTransformer transformer;
+    private StringBuilder text;
+    
+    public NamespacePrefixRepeatingSerializingRecorder(AbstractSAXPipelineTransformer transformer) {
+      this.transformer = transformer;
+      text = new StringBuilder();
+    }
+    
+    public String toString() {
+      return text.toString();
+    }
+    
+    // ContentHandler Interface
+
+    public void skippedEntity(String name) throws SAXException {
+    }
+
+    public void setDocumentLocator(Locator locator) {
+    }
+
+    public void ignorableWhitespace(char ch[], int start, int length) throws SAXException {
+      text.append(String.copyValueOf(ch, start, length));
+    }
+
+    public void processingInstruction(String target, String data) throws SAXException {
+      text.append("<?").append(target).append(" ").append(data).append("?>");
+    }
+
+    public void startDocument() throws SAXException {
+    }
+
+    public void endDocument() throws SAXException {
+    }
+
+    public void startElement(String namespaceURI, String localName, String qName, Attributes atts) throws SAXException {
+      text.append('<').append(qName);
+      List<String> prefixes = getUsedPrefixes(namespaceURI, qName, atts);
+      Map<String, String> prefixAndUris = uniqueNamespacePrefixes();
+      for (String prefix : prefixes) {
+        String uri = prefixAndUris.get(prefix);
+        text.append(" xmlns:").append(prefix).append("=\"").append(StringEscapeUtils.escapeXml(uri)).append('"');
+      }
+      for (int i = 0; i < atts.getLength(); ++i) {
+        text.append(' ').append(atts.getQName(i)).append("=\"").append(StringEscapeUtils.escapeXml(atts.getValue(i))).append('"');
+      }
+      text.append('>');
+    }
+
+    public void endElement(String namespaceURI, String localName, String qName) throws SAXException {
+      text.append("</").append(qName).append('>');
+    }
+
+    public void characters(char ch[], int start, int length) throws SAXException {
+      text.append(String.copyValueOf(ch, start, length));
+    }
+
+    public void startPrefixMapping(String prefix, String uri) throws SAXException {
+    }
+
+    public void endPrefixMapping(String prefix) throws SAXException {
+    }
+
+    // LexicalHandler Interface
+
+    public void startCDATA() throws SAXException {
+    }
+
+    public void endCDATA() throws SAXException {
+    }
+
+    public void comment(char ch[], int start, int length) throws SAXException {
+      text.append("<!--").append(String.copyValueOf(ch, start, length)).append("-->");
+    }
+
+    public void startEntity(String name) throws SAXException {
+    }
+
+    public void endEntity(String name) throws SAXException {
+    }
+
+    public void startDTD(String name, String publicId, String systemId) throws SAXException {
+    }
+
+    public void endDTD() throws SAXException {
+    }
   }
 }
