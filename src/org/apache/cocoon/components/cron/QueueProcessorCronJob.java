@@ -172,7 +172,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
     private static final long PROCESSOR_STATUS_FILE_STALE = 1200000;
-    private static final long TASK_TIMEOUT = 28800000; // 8u.
+    private static final long TASK_TIMEOUT = 240000; //4m 28800000; // 8u.
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";

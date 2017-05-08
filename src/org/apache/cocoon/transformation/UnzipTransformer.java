@@ -22,7 +22,6 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Enumeration;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -179,7 +178,10 @@ public class UnzipTransformer extends AbstractSAXTransformer {
     }
 
     private static String dirpart(String name) {
-        int s = name.lastIndexOf(File.separatorChar);
+        int s = name.lastIndexOf('/');
+        if (s == -1) {
+            s = name.lastIndexOf('\\');
+        }
         return s == -1 ? null : name.substring(0, s);
     }
 
