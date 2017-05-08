@@ -457,7 +457,11 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
       Map<String, String> prefixAndUris = uniqueNamespacePrefixes();
       for (String prefix : prefixes) {
         String uri = prefixAndUris.get(prefix);
-        text.append(" xmlns:").append(prefix).append("=\"").append(StringEscapeUtils.escapeXml(uri)).append('"');
+        text.append(" xmlns");
+        if (!(prefix.equals(""))) {
+            text.append(":").append(prefix);
+        }
+        text.append("=\"").append(StringEscapeUtils.escapeXml(uri)).append('"');
       }
       for (int i = 0; i < atts.getLength(); ++i) {
         text.append(' ').append(atts.getQName(i)).append("=\"").append(StringEscapeUtils.escapeXml(atts.getValue(i))).append('"');
