@@ -1,11 +1,13 @@
 package org.apache.cocoon.transformation;
 
-import org.xml.sax.SAXException;
+import java.text.Normalizer;
 
-import java.util.regex.*;
+import org.xml.sax.SAXException;
 
 public class LigatureExpanderTransformer extends AbstractSAXPipelineTransformer {
   
+/* Previously, we only expanded two ligatures, "ij" and "IJ".
+ * We have switched to Unicode NFKC instead.
   private static final String ligatures = "\u0132\u0133";
   private static final String[] expands = {"IJ", "ij"};
   
@@ -29,19 +31,16 @@ public class LigatureExpanderTransformer extends AbstractSAXPipelineTransformer 
     }
     return sb.toString();
   }
-  
+*/
+
   /* (non-Javadoc)
    * @see org.apache.cocoon.transformation.AbstractSAXTransformer#characters(char[], int, int)
    */
   @Override
   public void characters(char[] text, int start, int length) throws SAXException {
     String textString = String.valueOf(text, start, length);
-    if (!hasLigatures(textString)) {
-      super.characters(text, start, length);
-    } else {
-      textString = expandLigatures(textString);
-      super.characters(textString.toCharArray(), 0, textString.length());
-    }
+    textString = Normalizer.normalize(textString, Normalizer.Form.NFKC);
+    super.characters(textString.toCharArray(), 0, textString.length());
   }
 
   /* (non-Javadoc)
@@ -50,12 +49,8 @@ public class LigatureExpanderTransformer extends AbstractSAXPipelineTransformer 
   @Override
   public void comment(char[] text, int start, int length) throws SAXException {
     String textString = String.valueOf(text, start, length);
-    if (!hasLigatures(textString)) {
-      super.comment(text, start, length);
-    } else {
-      textString = expandLigatures(textString);
-      super.comment(textString.toCharArray(), 0, textString.length());
-    }
+    textString = Normalizer.normalize(textString, Normalizer.Form.NFKC);
+    super.comment(textString.toCharArray(), 0, textString.length());
   }
 
 }

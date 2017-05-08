@@ -3,3 +3,4 @@ build/
 BeValueCocoonComponents.jar
 /nbproject/private/
 EssentialCocoonComponents.jar
+**/desktop.ini

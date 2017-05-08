@@ -12,13 +12,13 @@ import org.apache.avalon.framework.parameters.ParameterException;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
-import org.apache.commons.lang.StringEscapeUtils;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 
 /**
  * This class serializes the XML within the transforming element.
- * Namespace-prefix declarations are repeated as often as needed to allow fragments to be taken from the serialized content.
+ * Namespace-prefix declarations are repeated for each element to allow fragments to be taken from the serialized content.
+ * The newer (> 9.7.0.2) Saxon serializer reduces namespaces, so we cannot use it for serialization.
  */
 public class SerializationTransformer extends AbstractSAXPipelineTransformer {
   
@@ -48,7 +48,7 @@ public class SerializationTransformer extends AbstractSAXPipelineTransformer {
       throws ProcessingException, IOException, SAXException {
     if (name.equals(serializeElementTag)) {
       sendStartElementEventNS(name, attr);
-      startSerializedXMLRecording(propertiesForXML());
+      startSerializedXMLRecording(null);
     } else  {
       super.startTransformingElement(uri, name, raw, attr);
     }
@@ -96,6 +96,8 @@ public class SerializationTransformer extends AbstractSAXPipelineTransformer {
     format.put(OutputKeys.OMIT_XML_DECLARATION, "yes");
     format.put(OutputKeys.INDENT, "no");
     format.put(OutputKeys.ENCODING, "UTF-8");
+    //format.put(OutputKeys.VERSION, "1.1");
+    //format.put("undeclare-prefixes", "yes");
     return format;
   }
 
