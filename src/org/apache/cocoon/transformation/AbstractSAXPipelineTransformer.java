@@ -474,7 +474,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     }
 
     public void characters(char ch[], int start, int length) throws SAXException {
-      text.append(String.copyValueOf(ch, start, length));
+      text.append(StringEscapeUtils.escapeXml(String.copyValueOf(ch, start, length)));
     }
 
     public void startPrefixMapping(String prefix, String uri) throws SAXException {
