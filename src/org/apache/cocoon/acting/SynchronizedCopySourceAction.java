@@ -8,9 +8,9 @@ import org.apache.avalon.framework.service.ServiceManager;
 import org.apache.avalon.framework.thread.ThreadSafe;
 import org.apache.cocoon.components.source.impl.PartSource;
 import org.apache.cocoon.environment.Redirector;
-import org.apache.cocoon.environment.SourceResolver;
 import org.apache.excalibur.source.ModifiableSource;
 import org.apache.excalibur.source.Source;
+import org.apache.excalibur.source.SourceResolver;
 import org.apache.excalibur.source.SourceUtil;
 import org.apache.excalibur.source.TraversableSource;
 
