@@ -68,7 +68,7 @@ import org.xml.sax.SAXException;
  * Attributes in the "http://www.w3.org/2006/http#" namespace are used as request headers.
  * The header name is the local name of the attribute.
  * 
- * Attributes in the "http://apache.org/cocoon/sparql/1.0" namespace are used as request parameters.
+ * Attributes in the "http://apache.org/cocoon/sparql/1.0" (sparql:) namespace are used as request parameters.
  * The parameter name is the local name of the attribute. Note: This does not allow for multivalued parameters.
  * 
  * The text content of the <code>query</code> element is passed as the value of the 'query' parameter in GET and
