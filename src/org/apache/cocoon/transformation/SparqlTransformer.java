@@ -30,6 +30,7 @@ import org.apache.cocoon.environment.SourceResolver;
 import org.apache.cocoon.xml.AttributesImpl;
 import org.apache.cocoon.xml.IncludeXMLConsumer;
 import org.apache.commons.httpclient.*;
+import org.apache.commons.httpclient.auth.AuthScope;
 import org.apache.commons.httpclient.methods.*;
 import org.apache.excalibur.source.SourceParameters;
 import org.apache.excalibur.xmlizer.XMLizer;
@@ -46,6 +47,10 @@ import org.xml.sax.SAXException;
  * The mandatory <code>src</code> attribute contains the url of a SPARQL endpoint.
  * 
  * The optional <code>method</code> attribute contains the HTTP method for the request (default is GET).
+ * 
+ * The optional <code>credentials</code> attribute contains a username and password, separated by a tab character (&#x9;).
+ * The credentials will be sent to <a href="http://hc.apache.org/httpclient-3.x/authentication.html">any authentication realm</a>,
+ * so be careful to send them only to the intended service!
  * 
  * For POST requests, parameters are sent in the body if the attribute <code>http:Content-Type</code> is
  * "application/x-www-form-urlencoded".
@@ -109,6 +114,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public static final String HTTP_NAMESPACE_URI ="http://www.w3.org/2006/http#";
   public static final String QUERY_ELEMENT = "query";
   public static final String METHOD_ATTR = "method";
+  public static final String CREDENTIALS_ATTR = "credentials";
   public static final String CONTENT_ATTR = "content";
   public static final String PARSE_ATTR = "parse";
   public static final String SHOW_ERRORS_ATTR = "showErrors";
@@ -120,6 +126,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   private boolean inQuery;
   private String src;
   private String method;
+  private String credentials;
   private String contentType;
   private String parameterName;
   private String parse;
@@ -151,6 +158,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       src = getAttribute(attr, SRC_ATTR, null);
       if (src == null) throw new ProcessingException("The "+SRC_ATTR+" attribute is mandatory for "+QUERY_ELEMENT+" elements.");
       method = getAttribute(attr, METHOD_ATTR, "GET");
+      credentials = getAttribute(attr, CREDENTIALS_ATTR, "");
       contentType = getAttribute(attr, CONTENT_ATTR, "text");
       parameterName = getAttribute(attr, PARAMETER_NAME_ATTR, DEFAULT_QUERY_PARAM);
       parse = getAttribute(attr, PARSE_ATTR, "xml");
@@ -215,6 +223,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         }
       }
     }
+    // Make the HttpMethod.
     HttpMethod httpMethod = null;
     // Do not use empty query parameter.
     if (requestParameters.getParameter(parameterName).trim().equals("")) {
@@ -261,6 +270,13 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       httpMethod.setQueryString(requestParameters.getEncodedQueryString());
     } else {
       throw new ProcessingException("Unsupported method: "+method);
+    }
+    // Authentication (optional).
+    if (credentials != null && credentials.length() > 0) {
+      String[] unpw = credentials.split("\t");
+      httpclient.getParams().setAuthenticationPreemptive(true);
+      httpclient.getState().setCredentials(new AuthScope(httpMethod.getURI().getHost(), httpMethod.getURI().getPort(), AuthScope.ANY_REALM),
+                                           new UsernamePasswordCredentials(unpw[0], unpw[1]));
     }
     // Add request headers.
     Iterator headers = httpHeaders.entrySet().iterator();
