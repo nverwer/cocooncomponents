@@ -79,6 +79,7 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
 
   /** The input source */
   private Source inputSource;
+  private String defaultEncoding = null;
   private String encoding = null;
   private String namespace = null;
   private String element = null;
@@ -103,7 +104,7 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
   public void parameterize(Parameters parameters) throws ParameterException
   {
     this.localizable = parameters.getParameterAsBoolean(LOCALIZABLE_PARAM, false);
-    this.encoding = parameters.getParameter(ENCODING_PARAM, this.encoding);
+    this.defaultEncoding = parameters.getParameter(ENCODING_PARAM, this.defaultEncoding);
   }
 
   /**
@@ -122,7 +123,7 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
       throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectmodel, src, parameters);
     try {
-      this.encoding = parameters.getParameter(ENCODING_PARAM, this.encoding);
+      this.encoding = parameters.getParameter(ENCODING_PARAM, this.defaultEncoding);
       this.namespace = parameters.getParameter(NAMESPACE_PARAM, DEFAULT_NAMESPACE);
       this.element = parameters.getParameter(ELEMENT_PARAM, DEFAULT_ELEMENT);
       this.inputSource = resolver.resolveURI(src);

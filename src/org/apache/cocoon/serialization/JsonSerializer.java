@@ -127,7 +127,9 @@ public class JsonSerializer extends TextSerializer {
         else if (c[start] == 'f') sendTextEvent("false");
       break;
       case STRING :
-        String escaped = StringEscapeUtils.escapeJavaScript(String.valueOf(c, start, len));
+        // The only difference between Java strings and JavaScript strings is that in JavaScript, a single quote must be escaped.
+        // But in JSON it must not be escaped!
+        String escaped = StringEscapeUtils.escapeJava(String.valueOf(c, start, len));
         super.characters(escaped.toCharArray(), 0, escaped.length());
       break;
       default :
