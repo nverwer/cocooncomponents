@@ -60,7 +60,7 @@ public class JsonSerializer extends TextSerializer {
     boolean escapedKey = "true".equals(atts.getValue("escaped-key"));
     // Check (on the first element) if there are keyed items in an array.
     if (jsonType == JsonType.ARRAY && key != null) {
-      throw new SAXException("Items of an array cannot have keys.");
+      throw new SAXException("Items of an array cannot have keys (key is '"+key+"')");
     }
     // If the element has a key, put it in the stringbuffer as JSON.
     if (key != null) {

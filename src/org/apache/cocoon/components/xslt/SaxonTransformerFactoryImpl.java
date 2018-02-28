@@ -24,15 +24,27 @@ import net.sf.saxon.TransformerFactoryImpl;
  * This can be changed in the underlying controller (https://www.saxonica.com/html/documentation/javadoc/index.html?net/sf/saxon/Controller.html).
  * The re-routing of messages is done automatically in this class, which behaves like a normal SAXTransformerFactory,
  * using a normal Transformer. Classes using this do not need to have any Saxon-specific code.
+ * In cocoon.xconf, use the following:
+ *   <component class="org.apache.cocoon.components.xslt.TraxProcessor" logger="core.xslt" pool-max="${xslt-transformer.pool-max}" role="org.apache.excalibur.xml.xslt.XSLTProcessor/saxon">
+ *     <parameter name="use-store" value="true"/>
+ *     <parameter name="transformer-factory" value="org.apache.cocoon.components.xslt.SaxonTransformerFactoryImpl"/>
+ *   </component>
  */
 
 public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   
+  /**
+   * The underlying Saxon TransformerFactoryImpl that we use.
+   */
   private net.sf.saxon.TransformerFactoryImpl saxonTransformerFactory;
   
+  /**
+   * Constructor of the wrapper around Saxon's TransformerFactoryImpl
+   * @throws TransformerConfigurationException
+   */
   protected SaxonTransformerFactoryImpl() throws TransformerConfigurationException {
     try {
-      // Prefer the ProfessionalTransformerFactory (commercial) if it is present.
+      // Prefer the ProfessionalTransformerFactory (commercial Saxon) if it is present.
       saxonTransformerFactory = (TransformerFactoryImpl) Class.forName("com.saxonica.config.ProfessionalTransformerFactory").newInstance();
     } catch (Exception ex1) {
       try {
@@ -45,7 +57,8 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   }
   
   /**
-   * Re-route messages from <xsl:message> to the errorListener, not to the messageEmitter.
+   * Modify a Saxon Transformer, so that it sends messages from <xsl:message> to the errorListener, not to the messageEmitter.
+   * This should be applied whenever a Transformer is returned from a method.
    */
   private Transformer routeMessages(Transformer transformer) {
     if (transformer instanceof net.sf.saxon.jaxp.TransformerImpl) {
@@ -56,38 +69,51 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   }
 
   /**
-   * Wrap the Saxon transformerhandler.
+   * Get a TransformerHandler object that can process SAX ContentHandler events into a Result, based on the transformation instructions specified by the argument.
+   * Wrap the Saxon transformerhandler in our own SaxonTransformerHandler object (local class defined below).
    */
   @Override
   public TransformerHandler newTransformerHandler(Source src) throws TransformerConfigurationException {
     return new SaxonTransformerHandler(saxonTransformerFactory.newTransformerHandler(src));
   }
 
+  /**
+   * Get a TransformerHandler object that can process SAX ContentHandler events into a Result, based on the Templates argument.
+   * Wrap the Saxon transformerhandler in our own SaxonTransformerHandler object (local class defined below).
+   */
   @Override
   public TransformerHandler newTransformerHandler(Templates templates) throws TransformerConfigurationException {
     return new SaxonTransformerHandler(saxonTransformerFactory.newTransformerHandler(templates));
   }
 
+  /**
+   * Get a TransformerHandler object that can process SAX ContentHandler events into a Result.
+   * Wrap the Saxon transformerhandler in our own SaxonTransformerHandler object (local class defined below).
+   */
   @Override
   public TransformerHandler newTransformerHandler() throws TransformerConfigurationException {
     return new SaxonTransformerHandler(saxonTransformerFactory.newTransformerHandler());
   }
   
   /**
-   * Modify the transformer.
+   * Process the Source into a Transformer object.
+   * Modify the transformer so that messages are re-routed.
    */
-
   @Override
   public Transformer newTransformer(Source source) throws TransformerConfigurationException {
     return routeMessages(saxonTransformerFactory.newTransformer(source));
   }
 
+  /**
+   * Create a new Transformer object that performs a copy of the source to the result.
+   * Modify the transformer so that messages are re-routed.
+   */
   @Override
   public Transformer newTransformer() throws TransformerConfigurationException {
     return routeMessages(saxonTransformerFactory.newTransformer());
   }
 
-  // All other messages are passed on.
+  // All other methods are passed on to the saxonTransformerFactory.
   
   @Override
   public TemplatesHandler newTemplatesHandler() throws TransformerConfigurationException {
@@ -157,6 +183,7 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   
   /**
    * A transformer handler that wraps the transformer handler from Saxon.
+   * All this does is modify the Transformer returned by getTransformer, so it re-routes messages.
    */
   class SaxonTransformerHandler implements TransformerHandler {
     
