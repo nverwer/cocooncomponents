@@ -35,10 +35,10 @@ public class EncodingTextSerializer extends TextSerializer {
   }
 
   @Override
-  public void startElement(String uri, String loc, String raw, Attributes a)
+  public void startElement(String namespaceURI, String localName, String qName, Attributes atts)
   throws SAXException {
     this.hadRootElement = true;
-    super.startElement(uri, loc, raw, a);
+    super.startElement(namespaceURI, localName, qName, atts);
   }
   
   @Override

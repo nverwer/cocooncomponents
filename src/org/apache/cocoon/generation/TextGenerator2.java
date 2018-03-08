@@ -43,7 +43,7 @@ import java.io.Serializable;
 import java.util.Map;
 
 /**
- * Read a plain text file and produce a valid XML file.
+ * Read a plain text file and produce a valid XML file, like
  * <pre>
  * &lt;text xmlns="http://chaperon.sourceforge.net/schema/text/1.0"&gt;
  *  Text 123 bla
@@ -53,6 +53,8 @@ import java.util.Map;
  * This modified version supports the "encoding" parameter, both in the configuration and in the pipeline.
  * It also supports the optional "namespace" and "element" parameters, that specify the namespace and tagname of the root element.
  * The defaults are "http://chaperon.sourceforge.net/schema/text/1.0" and "text".
+ * 
+ * The "nonXmlChars" parameter contains substitues for 'illegal' characters \x00 - \x1F
  *
  * @author <a href="mailto:stephan@apache.org">Stephan Michels </a>
  * @author <a href="mailto:rolf.schumacher@hamburg.de">Rolf Schumacher</a>
@@ -69,13 +71,15 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
   public static final String ELEMENT_PARAM = "element";
   private static final char[] initNonXmlChars =
   {
+//  00   01   02   03   04   05   06   07   08   09   10   11   12   13   14   15
     ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', 
-    //  16  17  18  19  20  21  22  23  24  25  26  27  28  29  30  31  
+//  16   17   18   19   20   21   22   23   24   25   26   27   28   29   30   31  
     ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '
   };
 
   /** The input source */
   private Source inputSource;
+  private String defaultEncoding = null;
   private String encoding = null;
   private String namespace = null;
   private String element = null;
@@ -89,8 +93,6 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
   {
     if (inputSource!=null) super.resolver.release(inputSource);
     inputSource = null;
-    encoding = null;
-    nonXmlChars = null;
     super.recycle();
   }
 
@@ -102,7 +104,7 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
   public void parameterize(Parameters parameters) throws ParameterException
   {
     this.localizable = parameters.getParameterAsBoolean(LOCALIZABLE_PARAM, false);
-    this.encoding = parameters.getParameter(ENCODING_PARAM, this.encoding);
+    this.defaultEncoding = parameters.getParameter(ENCODING_PARAM, this.defaultEncoding);
   }
 
   /**
@@ -121,7 +123,7 @@ public class TextGenerator2 extends ServiceableGenerator implements Parameteriza
       throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectmodel, src, parameters);
     try {
-      this.encoding = parameters.getParameter(ENCODING_PARAM, this.encoding);
+      this.encoding = parameters.getParameter(ENCODING_PARAM, this.defaultEncoding);
       this.namespace = parameters.getParameter(NAMESPACE_PARAM, DEFAULT_NAMESPACE);
       this.element = parameters.getParameter(ELEMENT_PARAM, DEFAULT_ELEMENT);
       this.inputSource = resolver.resolveURI(src);
