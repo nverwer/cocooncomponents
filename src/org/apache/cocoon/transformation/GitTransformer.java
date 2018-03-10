@@ -32,6 +32,9 @@ import org.xml.sax.SAXException;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.dircache.DirCache;
+import org.eclipse.jgit.transport.PushResult;
+import org.eclipse.jgit.api.PushCommand;
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 
 /**
  * This transformer can perform actions on a local git repository.
@@ -49,24 +52,21 @@ import org.eclipse.jgit.dircache.DirCache;
  * </pre>
  * <pre>
  * {@code
- *   <git:init repository="repository id"/>
- *   <git:clone repository="repository id" account="..." password="..." url="https://..." />
- *   // <git:checkout repository="repository id" branch=".."/>
- *   <git:add repository="repository id" file="..."/>
- *   <git:commit repository="repository id" author_name="..." author_email="..."><git:commit_message>...</git:commit_message></git:commit>
- *   <git:pull repository="repository id"/>
- *   <git:push repository="repository id"/>
+ *   <git:init repository="path to local repository"/>
+ *   <git:clone repository="path to local repository" account="..." password="..." url="https://..." />
+ *   // <git:checkout repository="path to local repository" branch=".."/>
+ *   <git:add repository="path to local repository" file="..."/>
+ *   <git:commit repository="path to local repository" author_name="..." author_email="..."><git:commit_message>...</git:commit_message></git:commit>
+ *   <git:pull repository="path to local repository"/>
+ *   <git:push repository="path to local repository"/>
  * }
  * </pre>
- * The @repository attribute specifies the repository that is to be used. Repositories are specified when the
- * transformer is defined in the sitemap.
- *
+ * The @repository attribute specifies the path to the local repository that
+ * is to be used. 
  *
  *       <map:transformer logger="sitemap.transformer.git" name="git"
  *           pool-grow="2" pool-max="32" pool-min="8"
  *           src="org.apache.cocoon.transformation.GitTransformer">
- *         <repository id="repo-1" path=".../my-first-repository" />
- *         <repository id="repo-2" path=".../my-second-repository" />
  *       </map:transformer>
  *
  * <p>
@@ -85,33 +85,24 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String ADD_ELEMENT = "add";
     private static final String COMMIT_ELEMENT = "commit";
     private static final String CHECKOUT_ELEMENT = "checkout";
-    private static final String COMMIT_MESSAGE_ELEMENT = "commit_message";
+    private static final String COMMIT_MESSAGE_ELEMENT = "commit-message";
     private static final String PUSH_ELEMENT = "push";
     private static final String PULL_ELEMENT = "pull";
-    private static final String REPOSITORY_ELEMENT = "repository";
 
     private static final String REPOSITORY_ATTR = "repository";
-    private static final String ID_ATTR = "id";
-    private static final String PATH_ATTR = "path";
     private static final String URL_ATTR = "url";
-    private static final String AUTHORNAME_ATTR = "author_name";
-    private static final String AUTHOREMAIL_ATTR = "author_email";
+    private static final String AUTHORNAME_ATTR = "author-name";
+    private static final String AUTHOREMAIL_ATTR = "author-email";
     private static final String PASSWORD_ATTR = "password";
     private static final String ACCOUNT_ATTR = "account";
     private static final String FILE_ATTR = "file";
 
     private static final String RESULT_ELEMENT = "result";
 
-    private HashMap<String, Repository> repos;
-//    private String repo_id;
     private String commit_message;
-//    private String author_name;
-//    private String author_email;
-//    private String account;
-//    private String password;
-//    private String url;
-//    private String file;
-
+    private String repository;
+    private String author_name;
+    private String author_email;
 
     public GitTransformer() {
         this.defaultNamespaceURI = GIT_NAMESPACE_URI;
@@ -127,7 +118,6 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     public void configure(Configuration configuration)
             throws ConfigurationException {
         super.configure(configuration);
-        this.repos = getRepositories(configuration.getChildren(REPOSITORY_ELEMENT));
     }
 
     public void setup(SourceResolver resolver, Map objectModel, String src,
@@ -142,147 +132,165 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
 
     public void startTransformingElement(String uri, String name, String raw, Attributes attr)
             throws ProcessingException, IOException, SAXException {
-        Git git = null;
+        if (uri.equals(GIT_NAMESPACE_URI)) {
+            if (name.equals(CLONE_ELEMENT)) {
+                String repository = getAttribute(attr, REPOSITORY_ATTR, null);
+                String account = getAttribute(attr, ACCOUNT_ATTR, null);
+                String password = getAttribute(attr, PASSWORD_ATTR, null);
+                String url = getAttribute(attr, URL_ATTR, null);
 
-        if (name.equals(CLONE_ELEMENT)) {
-            String repo_id = getAttribute(attr, REPOSITORY_ATTR, null);
-            String account = getAttribute(attr, ACCOUNT_ATTR, null);
-            String password = getAttribute(attr, PASSWORD_ATTR, null);
-            String url = getAttribute(attr, URL_ATTR, null);
-            
-            if (null == repo_id) {
-                throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-            }
+                if (null == repository) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+                }
 
-            String directoryPath = (this.repos.get(repo_id)).path;
-            File directory = new File(directoryPath);
-            
-            try (Git git = Git.cloneRepository().setURI(url).
-                        setRemote(repo_id).
+                File directory = new File(repository);
+
+                try (Git git = Git.cloneRepository().setURI(url).
                         setCloneAllBranches(true).
                         setBranch(MASTER_BRANCH).
                         setDirectory(directory).
                         call()) {
-                
-                result("Git repository " + git.getRepository().getDirectory().toString() + " cloned from " + url);
-                
-            } catch (Exception ex) {
-                Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
-                throw new SAXException(ex);
-            } finally {
-                reset();
-            }
-        }
-        else if (name.equals(INIT_ELEMENT)) {
-            String repo_id = getAttribute(attr, REPOSITORY_ATTR, null);
-            
-            if (null == repo_id) {
-                throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-            }
-            
-            String directoryPath = (this.repos.get(repo_id)).path;
-            File directory = new File(directoryPath);
 
-            try (Git git = Git.init().setDirectory(directory).call()) {
-                
-                result("Git repository " + git.getRepository().getDirectory().toString() + " initialised.");
+                    result("Git repository " + git.getRepository().getDirectory().toString() + " cloned from " + url);
 
-            } catch (Exception ex) {
-                Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
-                throw new SAXException(ex);
-            } finally {
-                reset();
-            }
-        }
-//        else if (name.equals(CHECKOUT_ELEMENT)) {
-//            this.repo_id = getAttribute(attr, REPOSITORY_ATTR, null);
-//            if (null == this.repo_id) {
-//                throw new Exception(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-//            }
-//        }
-        else if (name.equals(ADD_ELEMENT)) {
-            String repo_id = getAttribute(attr, REPOSITORY_ATTR, null);
-            String file = getAttribute(attr, FILE_ATTR, null);
-            if (null == repo_id) {
-                throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-            }
-            try (Git git = getGit(repo_id)) {
+                } catch (Exception ex) {
+                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                    throw new SAXException(ex);
+                } finally {
+                    reset();
+                }
+            } else if (name.equals(INIT_ELEMENT)) {
+                String repository = getAttribute(attr, REPOSITORY_ATTR, null);
+
+                if (null == repository) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+                }
+
+                File directory = new File(repository);
+
+                try (Git git = Git.init().setDirectory(directory).call()) {
+
+                    result("Git repository " + git.getRepository().getDirectory().toString() + " initialised.");
+
+                } catch (Exception ex) {
+                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                    throw new SAXException(ex);
+                } finally {
+                    reset();
+                }
+            } //        else if (name.equals(CHECKOUT_ELEMENT)) {
+            //            this.repository = getAttribute(attr, REPOSITORY_ATTR, null);
+            //            if (null == this.repository) {
+            //                throw new Exception(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+            //            }
+            //        }
+            else if (name.equals(ADD_ELEMENT)) {
+                String repository = getAttribute(attr, REPOSITORY_ATTR, null);
+                String file = getAttribute(attr, FILE_ATTR, null);
+
+                if (null == repository) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+                }
                 
+                if (null == file) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", FILE_ATTR));
+                }
+                
+                try (Git git = Git.open(new File(repository))) {
+
                     DirCache dirCache = git.add().addFilepattern(file).call();
                     result("Git: repository now has " + dirCache.getEntryCount() + " entries.");
-            } catch (Exception ex) {
-                Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
-                throw new SAXException(ex);
-            } finally {
-                reset();
+
+                } catch (Exception ex) {
+                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                    throw new SAXException(ex);
+                } finally {
+                    reset();
+                }
+            } else if (name.equals(COMMIT_ELEMENT)) {
+                this.repository = getAttribute(attr, REPOSITORY_ATTR, null);
+                this.author_name = getAttribute(attr, AUTHORNAME_ATTR, null);
+                this.author_email = getAttribute(attr, AUTHOREMAIL_ATTR, null);
+                if (null == this.repository) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+                }
+                if (null == this.author_name) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", AUTHORNAME_ATTR));
+                }
+                if (null == this.author_email) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", AUTHOREMAIL_ATTR));
+                }
+            } else if (name.equals(COMMIT_MESSAGE_ELEMENT)) {
+                startTextRecording();
+            } else if (name.equals(PUSH_ELEMENT)) {
+                String repository = getAttribute(attr, REPOSITORY_ATTR, null);
+                String account = getAttribute(attr, ACCOUNT_ATTR, null);
+                String password = getAttribute(attr, PASSWORD_ATTR, null);
+
+                if (null == repository) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+                }
+                
+                if (null == account) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", ACCOUNT_ATTR));
+                }
+                
+                if (null == password) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", PASSWORD_ATTR));
+                }
+
+                try (Git git = Git.open(new File(repository))) {
+
+                    PushCommand pushCommand = git.push();
+                    pushCommand.setCredentialsProvider( new UsernamePasswordCredentialsProvider( account, password ) );
+                    Iterable<PushResult> pushResults = pushCommand.call();
+                    result("Git push: " + pushResults.toString());
+
+                } catch (Exception ex) {
+                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                    throw new SAXException(ex);
+                } finally {
+                    reset();
+                }
+            } else if (name.equals(PULL_ELEMENT)) {
+
+            } else {
+                super.startTransformingElement(uri, name, raw, attr);
             }
         }
-        else if (name.equals(COMMIT_ELEMENT)) {
-            String repo_id = getAttribute(attr, REPOSITORY_ATTR, null);
-            String author_name = getAttribute(attr, AUTHORNAME_ATTR, null);
-            String author_email = getAttribute(attr, AUTHORNAME_ATTR, null);
-            if (null == repo_id) {
-                throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-            }
-        }
-        else if (name.equals(COMMIT_MESSAGE_ELEMENT)) {
-            this.commit_message = getAttribute(attr, REPOSITORY_ATTR, null);
-            startTextRecording();
-        }
-        else if (name.equals(PUSH_ELEMENT)) {
-
-        }
-        else if (name.equals(PULL_ELEMENT)) {
-
-        }
-        else super.startTransformingElement(uri, name, raw, attr);
     }
 
     public void endTransformingElement(String uri, String name, String raw)
             throws ProcessingException, IOException, SAXException {
-        Git git = null;
+        if (uri.equals(GIT_NAMESPACE_URI)) {
 
-        if (name.equals(COMMIT_ELEMENT)) {
-            try {
-                if (null != (git = getGit(this.repo_id))) {
+            if (name.equals(COMMIT_ELEMENT)) {
+                if (null == this.commit_message) {
+                    throw new SAXException("Missing <git:commit-message/>.");
+                }
+                try (Git git = Git.open(new File(this.repository))) {
                     // Commit everything
                     PersonIdent personIdent = new PersonIdent(this.author_name, this.author_email);
                     git.commit().setMessage(this.commit_message).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
+                } catch (Exception ex) {
+                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                    throw new SAXException(ex);
+                } finally {
+                    reset();
                 }
-            } catch (Exception ex) {
-                Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
-                throw new SAXException(ex);
-            } finally {
-                reset();
+            } else if (name.equals(COMMIT_MESSAGE_ELEMENT)) {
+                this.commit_message = endTextRecording();
             }
+        } else {
+            super.endTransformingElement(uri, name, raw);
         }
-        else if (name.equals(COMMIT_MESSAGE_ELEMENT)) {
-            this.commit_message = endTextRecording();
-        }
-        else super.endTransformingElement(uri, name, raw);
     }
-
 
     private void reset() {
-        this.repo_id = null;
-        this.commit_message = null;
+        this.repository = null;
         this.author_name = null;
         this.author_email = null;
-        this.account = null;
-        this.password = null;
-        this.url = null;
-        this.file = null;
-    }
-
-    private Git getGit(String repo_id) throws IOException {
-
-        Repository repository = this.repos.get(repo_id);
-        if (null != repository) {
-            // Create a Git object for the selected repository
-            return Git.open(new File(repository.path));
-        }
-        else
-            return null;
+        this.commit_message = null;
     }
 
 //
@@ -328,47 +336,6 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         xmlConsumer.characters(output, 0, output.length);
         xmlConsumer.endElement(GIT_NAMESPACE_URI, RESULT_ELEMENT,
                 String.format("%s:%s", GIT_PREFIX, RESULT_ELEMENT));
-    }
-
-
-
-    /**
-     * Classes used for loading the repository info.
-     */
-    private static class Repository {
-
-        protected String id;
-        protected String path;
-//        protected String url;
-//        protected String account;
-//        protected String password;
-//        protected String author_name;
-//        protected String author_email;
-
-        public Repository() {
-        }
-
-        public boolean isValid() {
-            return  null != id &&
-                    null != path;
-        }
-    }
-
-    private HashMap<String, Repository> getRepositories(Configuration[] configurations) {
-
-        HashMap<String, Repository> repos = new HashMap<String, Repository>();
-
-        for (int i = 0; i < configurations.length; i++)
-        {
-            Configuration repo_conf = configurations[i];
-            Repository repo = new Repository();
-            repo.id = repo_conf.getAttribute(ID_ATTR, null);
-            repo.path = repo_conf.getAttribute(PATH_ATTR, null);
-            if (repo.isValid()) {
-                repos.put(repo.id, repo);
-            }
-        }
-        return repos;
     }
 
 }
