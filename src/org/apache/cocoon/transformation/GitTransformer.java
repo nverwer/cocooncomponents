@@ -33,7 +33,10 @@ import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.dircache.DirCache;
 import org.eclipse.jgit.transport.PushResult;
+import org.eclipse.jgit.api.PullResult;
 import org.eclipse.jgit.api.PushCommand;
+import org.eclipse.jgit.api.PullCommand;
+import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 
 /**
@@ -144,13 +147,19 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 }
 
                 File directory = new File(repository);
-
-                try (Git git = Git.cloneRepository().setURI(url).
+                
+                CloneCommand cloneCommand = Git.cloneRepository();
+                     
+                if (null != account) {
+                    cloneCommand.setCredentialsProvider( new UsernamePasswordCredentialsProvider( account, password ) );
+                }
+                
+                try (Git git = cloneCommand.setURI(url).
                         setCloneAllBranches(true).
                         setBranch(MASTER_BRANCH).
                         setDirectory(directory).
                         call()) {
-
+                       
                     result("Git repository " + git.getRepository().getDirectory().toString() + " cloned from " + url);
 
                 } catch (Exception ex) {
@@ -178,7 +187,8 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 } finally {
                     reset();
                 }
-            } //        else if (name.equals(CHECKOUT_ELEMENT)) {
+            }
+            //        else if (name.equals(CHECKOUT_ELEMENT)) {
             //            this.repository = getAttribute(attr, REPOSITORY_ATTR, null);
             //            if (null == this.repository) {
             //                throw new Exception(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
@@ -230,19 +240,13 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 if (null == repository) {
                     throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
                 }
-                
-                if (null == account) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", ACCOUNT_ATTR));
-                }
-                
-                if (null == password) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", PASSWORD_ATTR));
-                }
 
                 try (Git git = Git.open(new File(repository))) {
 
                     PushCommand pushCommand = git.push();
-                    pushCommand.setCredentialsProvider( new UsernamePasswordCredentialsProvider( account, password ) );
+                    if (null != account) {
+                        pushCommand.setCredentialsProvider( new UsernamePasswordCredentialsProvider( account, password ) );
+                    }
                     Iterable<PushResult> pushResults = pushCommand.call();
                     result("Git push: " + pushResults.toString());
 
@@ -253,7 +257,28 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                     reset();
                 }
             } else if (name.equals(PULL_ELEMENT)) {
+                String repository = getAttribute(attr, REPOSITORY_ATTR, null);
+                String account = getAttribute(attr, ACCOUNT_ATTR, null);
+                String password = getAttribute(attr, PASSWORD_ATTR, null);
 
+                if (null == repository) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+                }
+
+                try (Git git = Git.open(new File(repository))) {
+
+                    PullCommand pullCommand = git.pull();
+                    if (null != account) {
+                        pullCommand.setCredentialsProvider( new UsernamePasswordCredentialsProvider( account, password ) );
+                    }
+                    PullResult pullResult = pullCommand.call();
+                    result("Git pull: " + (pullResult.isSuccessful() ? "succeeded" : "failed") );
+                } catch (Exception ex) {
+                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                    throw new SAXException(ex);
+                } finally {
+                    reset();
+                }
             } else {
                 super.startTransformingElement(uri, name, raw, attr);
             }
