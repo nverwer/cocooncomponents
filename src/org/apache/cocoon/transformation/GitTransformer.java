@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.HashMap;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.avalon.framework.parameters.Parameters;
@@ -38,20 +39,26 @@ import org.eclipse.jgit.api.PullResult;
 import org.eclipse.jgit.api.PushCommand;
 import org.eclipse.jgit.api.PullCommand;
 import org.eclipse.jgit.api.CloneCommand;
+import org.eclipse.jgit.api.DiffCommand;
 import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.errors.EmtpyCommitException;
+import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.dircache.DirCache;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectReader;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.transport.PushResult;
 import org.eclipse.jgit.transport.FetchResult;
 import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 
 /**
  * This transformer can perform actions on a local git repository.
- * It has basic functionality, enough to init or clone a repo, fetch,
+ * It has basic functionality, enough to init or clone a repo, fetch, diff,
  * checkout a branch, add files, get the status, commit and push and pull.
  * <p>
  * This transformer triggers for elements in the namespace "http://apache.org/cocoon/git/1.0".
@@ -70,6 +77,7 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
  *   <git:init repository="..."/>
  *   <git:status repository="..."/>
  *   <git:fetch repository="..."/>
+ *   <git:diff repository="..." old-tree="..." new-tree="..."/>
  *   <git:checkout repository="..." branch="..."/>
  *   <git:clone repository="..." account="..." password="..." url="https://..."/>
  *   <git:add repository="..." file="..."/>
@@ -87,6 +95,7 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
  * With checkout, @file defaults to "master".
  * When committing @author-name and @author-email are mandatory.
  * @account and @password can be used when authentication is necessary.
+ * All output is in elements &lt;git:<action>-result>, e.g. &lt;git:init-result>.
  *
  *       <map:transformer logger="sitemap.transformer.git" name="git"
  *           pool-grow="2" pool-max="32" pool-min="8"
@@ -109,6 +118,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String STATUS_ELEMENT = "status";
     private static final String ADD_ELEMENT = "add";
     private static final String FETCH_ELEMENT = "fetch";
+    private static final String DIFF_ELEMENT = "diff";
     private static final String COMMIT_ELEMENT = "commit";
     private static final String CHECKOUT_ELEMENT = "checkout";
     private static final String COMMIT_MESSAGE_ELEMENT = "commit-message";
@@ -119,6 +129,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String PUSHRESULT_ELEMENT = "push-result";
     private static final String ADDRESULT_ELEMENT = "add-result";
     private static final String FETCHRESULT_ELEMENT = "fetch-result";
+    private static final String DIFFRESULT_ELEMENT = "diff-result";
     private static final String CHECKOUTRESULT_ELEMENT = "checkout-result";
     private static final String STATUSRESULT_ELEMENT = "status-result";
     private static final String INITRESULT_ELEMENT = "init-result";
@@ -132,6 +143,8 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String ACCOUNT_ATTR = "account";
     private static final String FILE_ATTR = "file";
     private static final String BRANCH_ATTR = "branch";
+    private static final String OLDTREE_ATTR = "old-tree";
+    private static final String NEWTREE_ATTR = "new-tree";
 
     private String commit_message;
     private String repository;
@@ -268,6 +281,43 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                         put("name", ref.getName());
                     }});
                     eE(CHECKOUTRESULT_ELEMENT);
+                } catch (Exception ex) {
+                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                    throw new SAXException(ex);
+                } finally {
+                    reset();
+                }
+            
+            } else if (name.equals(DIFF_ELEMENT)) {
+                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
+                final String oldTree = getAttribute(attr, OLDTREE_ATTR, "HEAD~^{tree}");
+                final String newTree = getAttribute(attr, NEWTREE_ATTR, "HEAD^{tree}");
+
+                if (null == repository) {
+                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
+                }
+
+                try (Git git = Git.open(new File(repository))) {
+                    DiffCommand diffCommand = git.diff();
+                    Repository repo = git.getRepository();
+                    ObjectId head = repo.resolve(newTree);
+                    ObjectId previousHead = repo.resolve(oldTree);
+// Instanciate a reader to read the data from the Git database
+                    ObjectReader reader = repo.newObjectReader();
+// Create the tree iterator for each commit
+                    CanonicalTreeParser oldTreeIter = new CanonicalTreeParser();
+                    oldTreeIter.reset(reader, previousHead);
+                    CanonicalTreeParser newTreeIter = new CanonicalTreeParser();
+                    newTreeIter.reset(reader, head);
+
+                    final List<DiffEntry> diffEntries = diffCommand.setOldTree(oldTreeIter).setNewTree(newTreeIter).call();
+                    sEr(DIFFRESULT_ELEMENT, repository);
+                    for (DiffEntry diffEntry : diffEntries) {
+                        sE("file");
+                        chars(diffEntry.toString());
+                        eE("file");
+                    }
+                    eE(DIFFRESULT_ELEMENT);
                 } catch (Exception ex) {
                     Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
                     throw new SAXException(ex);
