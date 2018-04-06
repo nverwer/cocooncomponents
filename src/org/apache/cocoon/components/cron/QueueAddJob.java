@@ -4,6 +4,8 @@ import com.thoughtworks.xstream.XStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
@@ -119,7 +121,7 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
         job.maxConcurrent = 1;
         job.name = this.jobName;
         job.created = new Date();
-        job.tasks = tasks;
+        job.tasks = new ArrayList<>(Arrays.asList(tasks));
 
         File currentJobFile = new File(inDir, String.format("job-%s.xml", jobID));
 

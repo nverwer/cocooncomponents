@@ -1,5 +1,13 @@
 package org.apache.cocoon.components.cron;
 
+import com.thoughtworks.xstream.XStream;
+import com.thoughtworks.xstream.converters.Converter;
+import com.thoughtworks.xstream.converters.MarshallingContext;
+import com.thoughtworks.xstream.converters.UnmarshallingContext;
+import com.thoughtworks.xstream.converters.extended.ISO8601DateConverter;
+import com.thoughtworks.xstream.io.HierarchicalStreamReader;
+import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
+import com.thoughtworks.xstream.io.xml.DomDriver;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
@@ -888,6 +896,60 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         public ArrayList<Task> tasks;
 
         public JobConfig() {
+        }
+    }
+    
+    
+    /**
+     * Set some XStream options to configure serialization.
+     * @return The configured XStream object.
+     */
+    public static XStream getXStreamJobConfig() {
+
+        // <job id="..." name="test-job" created="20140613T11:45:00" max-concurrent="3" description="...">
+        //   <tasks>
+        //      <task id="task-1">
+        //            <uri>http://localhost:8888/koop/front/queue-test?id=1</uri>
+        //      </task>
+        //      ...
+        // </job>
+        XStream xstream = new XStream(new DomDriver());
+
+//        ISO8601DateConverter
+        xstream.registerConverter(new ISO8601DateConverter());
+
+        xstream.alias("job", JobConfig.class);
+        xstream.useAttributeFor(JobConfig.class, "id");
+        xstream.useAttributeFor(JobConfig.class, "name");
+        xstream.useAttributeFor(JobConfig.class, "description");
+        xstream.useAttributeFor(JobConfig.class, "created");
+        xstream.useAttributeFor(JobConfig.class, "maxConcurrent");
+        xstream.aliasField("max-concurrent", JobConfig.class, "maxConcurrent");
+
+        xstream.alias("task", Task.class);
+        xstream.useAttributeFor(Task.class, "id");
+
+        return xstream;
+    }
+
+    public static class JodaTimeConverter implements Converter {
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public boolean canConvert(final Class type) {
+            return DateTime.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public void marshal(Object source, HierarchicalStreamWriter writer, MarshallingContext context) {
+            writer.setValue(source.toString());
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Object unmarshal(HierarchicalStreamReader reader,
+                UnmarshallingContext context) {
+            return new DateTime(reader.getValue());
         }
     }
 
