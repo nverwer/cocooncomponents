@@ -49,23 +49,28 @@ public class QueueAddJob extends ServiceableCronJob implements Configurable, Con
     @SuppressWarnings("rawtypes")
     @Override
     public void setup(Parameters params, Map objects) {
-        try {
-            if (this.getLogger().isInfoEnabled()) {
-                this.getLogger().info(String.format("params = %s", params));
-            }
-            this.uri = params.getParameter(JOBURI_PARAMETER);
-            this.jobName = params.getParameter(JOBNAME_PARAMETER, "Auto-generated job");
-            this.jobDescription = params.getParameter(JOBDESCRIPTION_PARAMETER,
-                    "Automatically added by QueueAddJob.");
+        if (null == params) {
+            this.getLogger().error("Weird: params = NULL");
+        }
+        else {
+            try {
+                if (this.getLogger().isInfoEnabled()) {
+                    this.getLogger().info(String.format("params = %s", params));
+                }
+                this.uri = params.getParameter(JOBURI_PARAMETER);
+                this.jobName = params.getParameter(JOBNAME_PARAMETER, "Auto-generated job");
+                this.jobDescription = params.getParameter(JOBDESCRIPTION_PARAMETER,
+                        "Automatically added by QueueAddJob.");
 
-            if (this.getLogger().isInfoEnabled()) {
-                this.getLogger().info(String.format("job-uri = %s", uri));
-                this.getLogger().info(String.format("job-name = %s", jobName));
-                this.getLogger().info(String.format("job-description = %s", jobDescription));
-            }
+                if (this.getLogger().isInfoEnabled()) {
+                    this.getLogger().info(String.format("job-uri = %s", uri));
+                    this.getLogger().info(String.format("job-name = %s", jobName));
+                    this.getLogger().info(String.format("job-description = %s", jobDescription));
+                }
 
-        } catch (ParameterException ex) {
-            Logger.getLogger(QueueAddJob.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (ParameterException ex) {
+                Logger.getLogger(QueueAddJob.class.getName()).log(Level.SEVERE, null, ex);
+            }
         }
     }
 
