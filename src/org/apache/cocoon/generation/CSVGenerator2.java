@@ -277,9 +277,11 @@ public class CSVGenerator2 extends FileGenerator {
                 prev = curr;
             }
 
-            /* Terminate any hanging open record element (just in case) */
-            this.dumpField();
-            this.dumpRecord();
+            /* Terminate any hanging open record element */
+            if (this.buffer.size() > 0) {
+              this.dumpField();
+              this.dumpRecord();
+            }
 
             /* Terminate the document */
             this.indent(0);
