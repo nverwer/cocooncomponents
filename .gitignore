@@ -5,3 +5,5 @@ BeValueCocoonComponents.jar
 EssentialCocoonComponents.jar
 **/desktop.ini
 .classpath
+
+\.settings/
