@@ -17,7 +17,8 @@ import org.apache.avalon.framework.thread.ThreadSafe;
  */
 public class FirstNonEmptyModule extends AbstractMetaModule implements ThreadSafe {
 
-  public Object getAttribute(String name, Configuration modeConf, Map objectModel) 
+  @Override
+  public Object getAttribute(String name, Configuration modeConf, @SuppressWarnings("rawtypes") Map objectModel) 
     throws ConfigurationException
   {
     Object value = null;

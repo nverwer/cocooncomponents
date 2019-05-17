@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -39,9 +39,9 @@ import org.xml.sax.helpers.AttributesImpl;
 /**
  * <p>A simple parser converting a Comma Separated Values (CSV) file into XML.</p>
  * <p>Derived from the original CSVGenerator, with some extra parameters.</p>
- * 
+ *
  * <p>This parser is controlled by the following sitemap parameters:</p>
- * 
+ *
  * <ul>
  *   <li>
  *     <b>process-headers</b>: whether the first line in the CSV is considered
@@ -68,9 +68,10 @@ import org.xml.sax.helpers.AttributesImpl;
  *     <b>buffer-size</b>: the size of the buffer used for reading the source
  *     CSV file (default: <i>4096 bytes</i>).
  *   </li>
- *   
+ *
  *   <li>
  *     <b>empty-fields</b>: whether to output empty fields (default: <i>false</i>).
+ *     This will also generate absent fields, if <b>process-headers</b> is true.
  *   </li>
  *   <li>
  *     <b>field-names</b>: whether to output field names for every record (default: <i>true</i>).
@@ -78,7 +79,7 @@ import org.xml.sax.helpers.AttributesImpl;
  * </ul>
  *
  * <p>The generated output will look something like the following:</p>
- * 
+ *
  * <pre>
  * &lt;?xml version="1.0" encoding="ISO-8859-1"?&gt;
  * &lt;csv:document xmlns:csv="http://apache.org/cocoon/csv/1.0"&gt;
@@ -116,7 +117,7 @@ public class CSVGenerator2 extends FileGenerator {
     public static final String NAMESPACE_PREFIX = "csv";
 
     /** <p>The default encoding configured in the Java VM.</p> */
-    private static final String DEFAULT_ENCODING = 
+    private static final String DEFAULT_ENCODING =
         new InputStreamReader(new ByteArrayInputStream(new byte[0])).getEncoding();
     /** <p>The default field separator character.</p> */
     private static final String DEFAULT_SEPARATOR = ",";
@@ -166,17 +167,17 @@ public class CSVGenerator2 extends FileGenerator {
     @Override
     public void recycle() {
         super.recycle();
-        this.emptyFields = false;
-        this.fieldNames = true;
-        this.encoding = DEFAULT_ENCODING;
-        this.separator = DEFAULT_SEPARATOR.charAt(0);
-        this.escape = DEFAULT_ESCAPE.charAt(0);
-        this.buffersize = DEFAULT_BUFFER_SIZE;
-        this.buffer = null;
-        this.columns = null;
-        this.recordnumber = 1;
-        this.fieldnumber = 1;
-        this.openrecord = false;
+        emptyFields = false;
+        fieldNames = true;
+        encoding = DEFAULT_ENCODING;
+        separator = DEFAULT_SEPARATOR.charAt(0);
+        escape = DEFAULT_ESCAPE.charAt(0);
+        buffersize = DEFAULT_BUFFER_SIZE;
+        buffer = null;
+        columns = null;
+        recordnumber = 1;
+        fieldnumber = 1;
+        openrecord = false;
     }
 
     /**
@@ -191,18 +192,18 @@ public class CSVGenerator2 extends FileGenerator {
 
         boolean header = parameters.getParameterAsBoolean("process-headers", false);
 
-        this.emptyFields = parameters.getParameterAsBoolean("empty-fields", false);
-        this.fieldNames = parameters.getParameterAsBoolean("field-names", true);
-        this.encoding = parameters.getParameter("encoding", DEFAULT_ENCODING);
-        this.separator = parameters.getParameter("separator", DEFAULT_SEPARATOR).charAt(0);
-        this.escape = parameters.getParameter("escape", DEFAULT_ESCAPE).charAt(0);
-        this.buffersize = parameters.getParameterAsInteger("buffer-size", DEFAULT_BUFFER_SIZE);
-        this.maxrecords = parameters.getParameterAsInteger("max-records", UNLIMITED_MAXRECORDS);
-        this.buffer = new CharArrayWriter();
-        this.columns = (header ? new HashMap<Integer, String>() : null);
-        this.recordnumber = (header ? 0 : 1);
-        this.fieldnumber = 1;
-        this.openrecord = false;
+        emptyFields = parameters.getParameterAsBoolean("empty-fields", false);
+        fieldNames = parameters.getParameterAsBoolean("field-names", true);
+        encoding = parameters.getParameter("encoding", DEFAULT_ENCODING);
+        separator = parameters.getParameter("separator", DEFAULT_SEPARATOR).charAt(0);
+        escape = parameters.getParameter("escape", DEFAULT_ESCAPE).charAt(0);
+        buffersize = parameters.getParameterAsInteger("buffer-size", DEFAULT_BUFFER_SIZE);
+        maxrecords = parameters.getParameterAsInteger("max-records", UNLIMITED_MAXRECORDS);
+        buffer = new CharArrayWriter();
+        columns = (header ? new HashMap<Integer, String>() : null);
+        recordnumber = (header ? 0 : 1);
+        fieldnumber = 1;
+        openrecord = false;
     }
 
     /**
@@ -210,8 +211,10 @@ public class CSVGenerator2 extends FileGenerator {
      */
     @Override
     public Serializable getKey() {
-        StringBuffer key = new StringBuffer(this.inputSource.getURI());
-        if (this.columns != null) key.append("headers");
+        StringBuffer key = new StringBuffer(inputSource.getURI());
+        if (columns != null) {
+          key.append("headers");
+        }
         key.append(separator);
         key.append(maxrecords);
         key.append(escape);
@@ -226,14 +229,14 @@ public class CSVGenerator2 extends FileGenerator {
     throws IOException, SAXException, ProcessingException {
 
         /* Create a new Reader correctly decoding the source stream */
-        CSVReader csv = new CSVReader(this.inputSource, this.encoding, this.buffersize);
+        CSVReader csv = new CSVReader(inputSource, encoding, buffersize);
 
         try {
             /* Start the document */
-            this.contentHandler.setDocumentLocator(csv);
-            this.contentHandler.startDocument();
-            this.contentHandler.startPrefixMapping(NAMESPACE_PREFIX, NAMESPACE_URI);
-            this.indent(0);
+            contentHandler.setDocumentLocator(csv);
+            contentHandler.startDocument();
+            contentHandler.startPrefixMapping(NAMESPACE_PREFIX, NAMESPACE_URI);
+            indent(0);
             this.startElement("document");
 
             /* Allocate buffer and status for parsing */
@@ -242,12 +245,12 @@ public class CSVGenerator2 extends FileGenerator {
             int curr = -1;
 
             /* Parse the file reading characters one-by-one */
-            while ((curr = csv.read()) >= 0 && (this.maxrecords == UNLIMITED_MAXRECORDS || recordnumber <= this.maxrecords)) {
+            while ((curr = csv.read()) >= 0 && (maxrecords == UNLIMITED_MAXRECORDS || recordnumber <= maxrecords)) {
 
                 /* Process any occurrence of the escape character */
-                if (curr == this.escape) {
-                    if ((unescaped) && (prev == this.escape)) {
-                        this.buffer.write(this.escape);
+                if (curr == escape) {
+                    if ((unescaped) && (prev == escape)) {
+                        buffer.write(escape);
                     }
                     unescaped = ! unescaped;
                     prev = curr;
@@ -255,8 +258,8 @@ public class CSVGenerator2 extends FileGenerator {
                 }
 
                 /* Process any occurrence of the field separator */
-                if ((unescaped) && (curr == this.separator)) {
-                    this.dumpField();
+                if ((unescaped) && (curr == separator)) {
+                    dumpField();
                     prev = curr;
                     continue;
                 }
@@ -264,102 +267,106 @@ public class CSVGenerator2 extends FileGenerator {
                 /* Process newline characters, ignore empty lines. */
                 if ((unescaped) && ((curr == '\r') || (curr == '\n'))) {
                     if (prev != '\r' && prev != '\n') {
-                      this.dumpField();
-                      this.dumpRecord();
-                      this.recordnumber ++;
+                      dumpField();
+                      dumpRecord();
+                      recordnumber ++;
                     }
                     prev = curr;
                     continue;
                 }
 
                 /* Any other character simply gets added to the buffer */
-                this.buffer.write(curr);
+                buffer.write(curr);
                 prev = curr;
             }
 
             /* Terminate any hanging open record element */
-            if (this.buffer.size() > 0) {
-              this.dumpField();
-              this.dumpRecord();
+            if (buffer.size() > 0) {
+              dumpField();
+              dumpRecord();
             }
 
             /* Terminate the document */
-            this.indent(0);
-            this.endElement("document");
-            this.contentHandler.endPrefixMapping(NAMESPACE_PREFIX);
-            this.contentHandler.endDocument();
+            indent(0);
+            endElement("document");
+            contentHandler.endPrefixMapping(NAMESPACE_PREFIX);
+            contentHandler.endDocument();
 
         } finally {
             csv.close();
         }
     }
 
-    
+
     private void dumpField()
     throws SAXException {
-        if (this.buffer.size() < 1 && !this.emptyFields) {
-            this.fieldnumber ++;
+        if (buffer.size() < 1 && !emptyFields) {
+            fieldnumber ++;
             return;
         }
 
-        if (! this.openrecord) {
-            this.indent(4);
+        if (! openrecord) {
+            indent(4);
 
-            if (this.recordnumber > 0) {
+            if (recordnumber > 0) {
                 AttributesImpl attributes = new AttributesImpl();
-                String value = Integer.toString(this.recordnumber);
+                String value = Integer.toString(recordnumber);
                 attributes.addAttribute("", "number", "number", "CDATA", value);
                 this.startElement("record", attributes);
             } else {
                 this.startElement("header");
             }
-            this.openrecord = true;
+            openrecord = true;
         }
 
         /* Enclose the field in the proper element */
         String element = "field";
-        char array[] = this.buffer.toCharArray();
-        this.indent(8);
+        char array[] = buffer.toCharArray();
+        indent(8);
 
         AttributesImpl attributes = new AttributesImpl();
-        String value = Integer.toString(this.fieldnumber);
+        String value = Integer.toString(fieldnumber);
         attributes.addAttribute("", "number", "number", "CDATA", value);
 
-        if (this.recordnumber < 1) {
-            this.columns.put(new Integer(this.fieldnumber), new String(array));
+        if (recordnumber < 1) {
+            columns.put(new Integer(fieldnumber), new String(array));
             element = "column";
-        } else if (this.columns != null) {
-            String header = (String) this.columns.get(new Integer(this.fieldnumber));
+        } else if (columns != null) {
+            String header = columns.get(new Integer(fieldnumber));
             if (header != null && fieldNames) {
                 attributes.addAttribute("", "column", "column", "CDATA", header);
             }
         }
 
         this.startElement(element, attributes);
-        this.contentHandler.characters(array, 0, array.length);
-        this.endElement(element);
-        this.buffer.reset();
+        contentHandler.characters(array, 0, array.length);
+        endElement(element);
+        buffer.reset();
 
-        this.fieldnumber ++;
+        fieldnumber ++;
     }
 
-    private void dumpRecord()
-    throws SAXException {
-        if (this.openrecord) {
-            this.indent(4);
-            if (this.recordnumber > 0) {
-                this.endElement("record");
+    private void dumpRecord() throws SAXException {
+        if (openrecord) {
+            indent(4);
+            if (recordnumber > 0) {
+                if (emptyFields && columns != null) {
+                  while (fieldnumber <= columns.size()) {
+                    dumpField();
+                  }
+                }
+                endElement("record");
             } else {
-                this.endElement("header");
+                endElement("header");
             }
-            this.openrecord = false;
+            openrecord = false;
         }
-        this.fieldnumber = 1;
+        fieldnumber = 1;
     }
 
     private void indent(int level)
     throws SAXException {
-        this.contentHandler.characters(INDENT_STRING, 0, level + 1);
+        contentHandler.characters(INDENT_STRING, 0, level + 1);
     }
 
     private void startElement(String name)
@@ -369,20 +376,24 @@ public class CSVGenerator2 extends FileGenerator {
 
     private void startElement(String name, Attributes atts)
     throws SAXException {
-        if (name == null) throw new NullPointerException("Null name");
-        if (atts == null) atts = new AttributesImpl();
+        if (name == null) {
+          throw new NullPointerException("Null name");
+        }
+        if (atts == null) {
+          atts = new AttributesImpl();
+        }
         String qual = NAMESPACE_PREFIX + ':' + name;
-        this.contentHandler.startElement(NAMESPACE_URI, name, qual, atts);
+        contentHandler.startElement(NAMESPACE_URI, name, qual, atts);
     }
 
     private void endElement(String name)
     throws SAXException {
         String qual = NAMESPACE_PREFIX + ':' + name;
-        this.contentHandler.endElement(NAMESPACE_URI, name, qual);
+        contentHandler.endElement(NAMESPACE_URI, name, qual);
     }
 
     private static final class CSVReader extends Reader implements Locator {
-        
+
         private String uri = null;
         private Reader input = null;
         private int column = 1;
@@ -393,8 +404,8 @@ public class CSVGenerator2 extends FileGenerator {
         throws IOException {
             InputStream stream = source.getInputStream();
             Reader reader = new InputStreamReader(stream, encoding);
-            this.input = new BufferedReader(reader, buffer);
-            this.uri = source.getURI();
+            input = new BufferedReader(reader, buffer);
+            uri = source.getURI();
         }
 
         @Override
@@ -404,58 +415,68 @@ public class CSVGenerator2 extends FileGenerator {
 
         @Override
         public String getSystemId() {
-            return this.uri;
+            return uri;
         }
 
         @Override
         public int getLineNumber() {
-            return this.line;
+            return line;
         }
 
         @Override
         public int getColumnNumber() {
-            return this.column;
+            return column;
         }
 
         @Override
         public void close()
         throws IOException {
-            this.input.close();
+            input.close();
         }
-        
+
         @Override
         public int read()
         throws IOException {
-            int c = this.input.read();
-            if (c < 0) return c;
-
-            if (((c == '\n') && (this.last != '\r')) || (c == '\r')) {
-                this.column = 1;
-                this.line ++;
+            int c = input.read();
+            if (c < 0) {
+              return c;
             }
 
-            this.last = c;
+            if (((c == '\n') && (last != '\r')) || (c == '\r')) {
+                column = 1;
+                line ++;
+            }
+
+            last = c;
             return c;
         }
 
         @Override
         public int read(char b[], int o, int l)
         throws IOException {
-            if (b == null) throw new NullPointerException();
+            if (b == null) {
+              throw new NullPointerException();
+            }
             if ((o<0)||(o>b.length)||(l<0)||((o+l)>b.length)||((o+l)<0)) {
                 throw new IndexOutOfBoundsException();
             }
-            if (l == 0) return 0;
+            if (l == 0) {
+              return 0;
+            }
 
             int c = read();
-            if (c == -1) return -1;
+            if (c == -1) {
+              return -1;
+            }
             b[o] = (char)c;
 
             int i = 1;
             try {
                 for (i = 1; i < l ; i++) {
                     c = read();
-                    if (c == -1) break;
+                    if (c == -1) {
+                      break;
+                    }
                     b[o + i] = (char)c;
                 }
             } catch (IOException ee) {

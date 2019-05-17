@@ -10,7 +10,11 @@ import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.avalon.framework.configuration.Configuration;
+import org.apache.avalon.framework.configuration.ConfigurationException;
 import org.apache.avalon.framework.parameters.Parameters;
+import org.apache.avalon.framework.service.ServiceException;
+import org.apache.avalon.framework.service.ServiceManager;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.components.modules.input.InputModuleHelper;
 import org.apache.cocoon.environment.SourceResolver;
@@ -29,6 +33,8 @@ import org.xml.sax.SAXException;
  * so that they send to the next component in the pipeline.
  * Contrary to what you would expect, that is not what the AbstractSAXTransformer does.
  * It also fixes the broken behaviour of TextRecording, SerializedXMLRecording and SAXRecording.
+ *
+ * @author Rakensi
  */
 public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
 
@@ -44,7 +50,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
    */
   private String ourPrefix;
   
-  /*
+  /**
    * The prefixes emitted by sendAllStartPrefixMapping, to be ended by the next sendAllEndPrefixMapping.
    */
   private Stack<List<String>> prefixStack = new Stack<List<String>>();
@@ -76,8 +82,53 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
     imh.releaseAll();
     return sb.toString();
   }
+  
+  /* Some inherited instance properties that you may find useful:
+   * context  The current Context object, containing context attributes and access to resources.
+   * defaultNamespaceURI  The default namespace of the transforming element. Implementations may set its value in the constructor.
+   * namespaceURI  The namespace of the transforming element, from the namespaceURI sitemap-parameter.
+   * ignoreEmptyCharacters  If set to true all characters events containing only whitespaces are ignored.
+   * ignoreEventsCount  If this is greater than zero all events are not forwarded to the next pipeline component, but the hooks (SAX event handlers) are still called.
+   * ignoreHooksCount  If this is greater than zero, the hooks are not called. Make sure that you decrement this counter properly.
+   * ignoreWhitespaces  If set to true all whitespace events are ignored.
+   * manager  The Avalon ServiceManager for getting Components based on their role.
+   * objectModel  The current objectModel of the environment (@see org.apache.cocoon.environment.ObjectModelHelper).
+   * parameters  The parameters specified in the sitemap.
+   * source  The source attribute specified in the sitemap.
+   * request  The current Request object.
+   * response  The current Response object.
+   * resolver  The SourceResolver for this request.
+   * EMPTY_ATTRIBUTES  Empty immutable attributes (for performance).
+   */
+  
+  /* Lifecycle methods in the order in which they are called. */
 
   /**
+   * Pass the ServiceManager to the Serviceable.
+   * The Serviceable implementation should use the specified ServiceManager to acquire the components it needs for execution.
+   * A ServiceManager selects Objects based on a role.
+   * @param serviceManager 
+   * @see org.apache.cocoon.transformation.AbstractSAXTransformer#service(org.apache.avalon.framework.service.ServiceManager)
+   */
+  @Override
+  public void service(ServiceManager serviceManager) throws ServiceException {
+    super.service(serviceManager);
+  }
+
+  /**
+   * Pass the Configuration to the Configurable class.
+   * @param configuration the class configurations encapsulating a configuration node used to retrieve configuration values, must not be null
+   * @see org.apache.cocoon.transformation.AbstractSAXTransformer#configure(org.apache.avalon.framework.configuration.Configuration)
+   */
+  @Override
+  public void configure(Configuration configuration) throws ConfigurationException {
+    super.configure(configuration);
+  }
+  
+  /**
+   * Set the SourceResolver (resolving a source by system identifiers),
+   * objectModel (@see org.apache.cocoon.environment.ObjectModelHelper),
+   * the source (src attribute in the sitemap) and sitemap parameters used to process the request. 
    * @see org.apache.cocoon.transformation.AbstractSAXTransformer#setup(org.apache.cocoon.environment.SourceResolver, java.util.Map, java.lang.String, org.apache.avalon.framework.parameters.Parameters)
    */
   @Override
@@ -94,6 +145,7 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
   }
 
   /**
+   * Recycle the producer by removing references, and resetting handlers to null (empty) implementations. 
    * @see org.apache.avalon.excalibur.pool.Recyclable#recycle()
    */
   public void recycle() {
@@ -101,6 +153,17 @@ public class AbstractSAXPipelineTransformer extends AbstractSAXTransformer {
       this.namespaces.clear();
       super.recycle();
   }
+  
+  /**
+   * The dispose operation is called at the end of a components lifecycle.
+   * Components use this method to release and destroy any resources that the Component owns. 
+   * @see org.apache.cocoon.transformation.AbstractSAXTransformer#dispose()
+   */
+  public void dispose() {
+    super.dispose();
+  }
+  
+  /* Transformation methods */
   
   /**
    * @see org.xml.sax.ContentHandler#startPrefixMapping
