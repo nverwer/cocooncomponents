@@ -34,19 +34,38 @@ import org.xml.sax.SAXException;
  * This transformer generates a random UUID for use as a CSRF-token, https://www.owasp.org/index.php/PHP_CSRF_Guard.
  * <p>
  * This transformer triggers for elements in the namespace "http://apache.org/cocoon/csrf/1.0".
- * The elements cannot be nested.
  * <p>
- * Example XML input:
+ * For example:
  * <p>
  * <pre>
  * {@code
  *   <csrf:token/>
  * }
  * </pre>
+ * will output:
+ * <pre>
+ * {@code
+ *   8a6d1fd4-be12-405c-a0f8-4b14c17e3c3a
+ * }
+ * </pre>
+ * You can also put the token in an attribute by including a @csrf:token attribute on an element. The value of
+ * @csrf:token is the name of the attribute that will be created on the element. For instance
+ * <pre>
+ * {@code
+ *   <element @csrf:token="value"/>
+ * }
+ * </pre>
+ * will output
+ *  <pre>
+ *  {@code
+ *    <element value="8a6d1fd4-be12-405c-a0f8-4b14c17e3c3a"/>
+ * }
+ * </pre>
  * <pre>
  * All supported actions:
  * {@code
  *   <csrf:token/>
+ *   <element @csrf:token="'name of attribute'"/>
  * }
  * </pre>
  *       <map:transformer logger="sitemap.transformer.csrf" name="csrf"
@@ -59,60 +78,57 @@ import org.xml.sax.SAXException;
  * </p>
  *
  */
-public class CSRFTransformer extends AbstractSAXPipelineTransformer {
+public class CSRFTransformer extends AbstractTransformer {
 
     public static final String CSRF_NAMESPACE_URI = "http://apache.org/cocoon/csrf/1.0";
 
-    private static final String GENERATE_ELEMENT = "generate";
+    private static final String TOKEN_ELEMENT = "token";
 
-    private char[] csrf_token = null;
+    private String csrf_token = null;
 
-    public CSRFTransformer() {
-        this.defaultNamespaceURI = CSRF_NAMESPACE_URI;
-    }
-
-    /*
-     * (non-Javadoc)
-     *
-     * @see
-     * org.apache.avalon.framework.configuration.Configurable#configure(org.
-     * apache.avalon.framework.configuration.Configuration)
-     */
-    public void configure(Configuration configuration)
-            throws ConfigurationException {
-        super.configure(configuration);
-    }
-
+    @Override
     public void setup(SourceResolver resolver, Map objectModel, String src,
-            Parameters params) throws ProcessingException, SAXException, IOException {
-        super.setup(resolver, objectModel, src, params);
-        csrf_token = UUID.randomUUID().toString().toCharArray();
+                      Parameters par) throws ProcessingException, SAXException, IOException {
+        // We don't need it.
     }
 
+    @Override
+    public void startDocument() throws SAXException {
+        this.csrf_token = UUID.randomUUID().toString();
+        super.startDocument();
+    }
 
-    public void startTransformingElement(String uri, String name, String raw, Attributes attr)
-            throws ProcessingException, IOException, SAXException {
-        if (uri.equals(CSRF_NAMESPACE_URI)) {
-            
-            if (name.equals(GENERATE_ELEMENT)) {
-                xmlConsumer.characters(crsf_token, 0, crsf_token.length);;
-            }
-            
-            else {
-                super.startTransformingElement(uri, name, raw, attr);
-            }
+    @Override
+    public void endElement(String uri, String loc, String raw)
+            throws SAXException {
+        if (uri.equals(CSRF_NAMESPACE_URI) && loc.equals(TOKEN_ELEMENT)) {
+        }
+        else {
+            super.endElement(uri, loc, raw);
         }
     }
 
-    public void endTransformingElement(String uri, String name, String raw)
-            throws ProcessingException, IOException, SAXException {
-        if (uri.equals(CSRF_NAMESPACE_URI)) {
 
-            if (name.equals(GENERATE_ELEMENT)) {
+    @Override
+    public void startElement(String uri, String loc, String raw, Attributes a)
+            throws SAXException {
+//        System.out.println("CSRF_NAMESPACE_URI="+CSRF_NAMESPACE_URI+", uri="+ uri + "loc="+loc);
+        // Process any csrf:* attributes, create a new attribute for them using as a name the value of the
+        // csrf:* attribute and as a value csrf_token (the CSRF token for the currently processed XML document).
+        AttributesImpl csrfAttr = new AttributesImpl(a);
+        for (int i=0; i < a.getLength(); i++) {
+            if (CSRF_NAMESPACE_URI.equals(a.getURI(i))) {
+                csrfAttr.setAttribute(i, "", a.getValue(i), a.getValue(i), "CDATA", this.csrf_token);
             }
-        } else {
-            super.endTransformingElement(uri, name, raw);
         }
+        if (uri.equals(CSRF_NAMESPACE_URI)) {
+            if (loc.equals(TOKEN_ELEMENT)) {
+                xmlConsumer.characters(this.csrf_token.toCharArray(), 0, this.csrf_token.toCharArray().length);;
+                return;
+            }
+        }
+        super.startElement(uri, loc, raw, csrfAttr);
     }
+
 
 }
