@@ -328,25 +328,25 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       }
       // Parse the response
       else {
-          if (responseCode == 204) { // No content.
-              String statusLine = httpMethod.getStatusLine().toString();
-              xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
-              xmlConsumer.characters(statusLine.toCharArray(), 0, statusLine.length());
-              xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
-              httpMethod.getResponseBodyAsString();
-          } else if (parse.equalsIgnoreCase("xml")) {
-              InputStream responseBodyStream = httpMethod.getResponseBodyAsStream();
-              xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
-              xmlizer.toSAX(responseBodyStream, "text/xml", httpMethod.getURI().toString(), new IncludeXMLConsumer(xmlConsumer));
-              responseBodyStream.close();
-          } else if (parse.equalsIgnoreCase("text")) {
-              xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
-              responseBody = httpMethod.getResponseBodyAsString();
-              xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
-              xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
-          } else {
-              throw new ProcessingException("Unknown parse type: "+parse);
-          }
+        if (responseCode == 204) { // No content.
+          String statusLine = httpMethod.getStatusLine().toString();
+          xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
+          xmlConsumer.characters(statusLine.toCharArray(), 0, statusLine.length());
+          xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
+          httpMethod.getResponseBodyAsString();
+        } else if (parse.equalsIgnoreCase("xml")) {
+          InputStream responseBodyStream = httpMethod.getResponseBodyAsStream();
+          xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
+          xmlizer.toSAX(responseBodyStream, "text/xml", httpMethod.getURI().toString(), new IncludeXMLConsumer(xmlConsumer));
+          responseBodyStream.close();
+        } else if (parse.equalsIgnoreCase("text")) {
+          xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
+          responseBody = httpMethod.getResponseBodyAsString();
+          xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
+          xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
+        } else {
+          throw new ProcessingException("Unknown parse type: " + parse);
+        }
       }
     } catch (ServiceException e) {
       throw new ProcessingException("Cannot find the right XMLizer for "+XMLizer.ROLE, e);
