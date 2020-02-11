@@ -22,16 +22,24 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 
-import org.apache.avalon.framework.component.Component;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.avalon.framework.service.ServiceException;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
 import org.apache.cocoon.xml.AttributesImpl;
 import org.apache.cocoon.xml.IncludeXMLConsumer;
-import org.apache.commons.httpclient.*;
+import org.apache.commons.httpclient.Header;
+import org.apache.commons.httpclient.HostConfiguration;
+import org.apache.commons.httpclient.HttpClient;
+import org.apache.commons.httpclient.HttpMethod;
+import org.apache.commons.httpclient.UsernamePasswordCredentials;
 import org.apache.commons.httpclient.auth.AuthScope;
-import org.apache.commons.httpclient.methods.*;
+import org.apache.commons.httpclient.methods.DeleteMethod;
+import org.apache.commons.httpclient.methods.GetMethod;
+import org.apache.commons.httpclient.methods.PostMethod;
+import org.apache.commons.httpclient.methods.PutMethod;
+import org.apache.commons.httpclient.methods.RequestEntity;
+import org.apache.commons.httpclient.methods.StringRequestEntity;
 import org.apache.excalibur.source.SourceParameters;
 import org.apache.excalibur.xmlizer.XMLizer;
 import org.xml.sax.Attributes;
@@ -43,47 +51,47 @@ import org.xml.sax.SAXException;
  *
  * This transformer triggers for the element <code>query</code> in the namespace "http://apache.org/cocoon/sparql/1.0".
  * These elements must not be nested.
- * 
+ *
  * The mandatory <code>src</code> attribute contains the url of a SPARQL endpoint.
- * 
+ *
  * The optional <code>method</code> attribute contains the HTTP method for the request (default is GET).
- * 
+ *
  * The optional <code>credentials</code> attribute contains a username and password, separated by a tab character (&#x9;).
  * The credentials will be sent to <a href="http://hc.apache.org/httpclient-3.x/authentication.html">any authentication realm</a>,
  * so be careful to send them only to the intended service!
- * 
+ *
  * For POST requests, parameters are sent in the body if the attribute <code>http:Content-Type</code> is
  * "application/x-www-form-urlencoded".
  * (Note that the header name "Content-Type" is case sensitive!)
  * In this case, the content of the <code>query</code> element is passed as the value of a parameter,
  * which has the name specified by the <code>parameter-name</code> attribute (default is "query").
- * 
+ *
  * Otherwise, the content of the <code>query</code> element (text or XML) goes into the request body.
- * 
+ *
  * The optional <code>content</code> attribute indicates if the content of the <code>query</code> element is "text"
  * (default for SPARQL queries), or "xml" (useful if you PUT RDF triples).
  * Unfortunately, if you use content="xml" you may run into namespace problems.
- * 
+ *
  * The optional <code>parse</code> attribute indicates how the response should be parsed.
  * It can be "xml" or "text". Default is "xml". Text will be wrapped in an XML element.
- * 
+ *
  * The optional <code>showErrors</code> attribute can be "true" (default; generate XML elements for HTTP errors)
  * or false (throw exceptions for HTTP errors).
- * 
+ *
  * The optional <code>showResponseHeaders</code> attribute can be true (generate output for the response headers)
  * or false (default; no output for response headers).
- * 
+ *
  * Attributes in the "http://www.w3.org/2006/http#" namespace are used as request headers.
  * The header name is the local name of the attribute.
- * 
+ *
  * Attributes in the "http://apache.org/cocoon/sparql/1.0" (sparql:) namespace are used as request parameters.
  * The parameter name is the local name of the attribute. Note: This does not allow for multivalued parameters.
- * 
+ *
  * The text content of the <code>query</code> element is passed as the value of the 'query' parameter in GET and
  * POST (www-form-urlencoded data) requests.
  * In PUT requests, it is the request entity (body). Note that this is text, even if you put RDF statements in it,
  * so XML must be escaped.
- * 
+ *
  * Example XML input, with content and parse attributes set to their default values:
  * <pre>
  *   <sparql:query
@@ -107,12 +115,12 @@ import org.xml.sax.SAXException;
  *   ]]>
  *   </sparql:query>
  * </pre>
- * 
+ *
  * @author Nico Verwer (nverwer@rakensi.com)
  *
  */
 public class SparqlTransformer extends AbstractSAXPipelineTransformer {
-  
+
   public static final String SPARQL_NAMESPACE_URI = "http://apache.org/cocoon/sparql/1.0";
   public static final String HTTP_NAMESPACE_URI ="http://www.w3.org/2006/http#";
   public static final String QUERY_ELEMENT = "query";
@@ -126,7 +134,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public static final String PARAMETER_NAME_ATTR = "parameter-name";
   public static final String DEFAULT_QUERY_PARAM = "query";
   public static final String HTTP_CONTENT_TYPE = "Content-Type";
-  
+
   private boolean inQuery;
   private String src;
   private String method;
@@ -140,7 +148,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   private SourceParameters requestParameters;
 
   public SparqlTransformer() {
-    this.defaultNamespaceURI = SPARQL_NAMESPACE_URI;
+    defaultNamespaceURI = SPARQL_NAMESPACE_URI;
   }
 
   @Override
@@ -149,7 +157,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     super.setup(resolver, objectModel, src, params);
     inQuery = false;
   }
-  
+
   private String getAttribute(Attributes attr, String name, String defaultValue) {
     return (attr.getIndex(name) >= 0) ? attr.getValue(name) : defaultValue;
   }
@@ -163,7 +171,9 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       }
       inQuery = true;
       src = getAttribute(attr, SRC_ATTR, null);
-      if (src == null) throw new ProcessingException("The "+SRC_ATTR+" attribute is mandatory for "+QUERY_ELEMENT+" elements.");
+      if (src == null) {
+        throw new ProcessingException("The "+SRC_ATTR+" attribute is mandatory for "+QUERY_ELEMENT+" elements.");
+      }
       method = getAttribute(attr, METHOD_ATTR, "GET");
       credentials = getAttribute(attr, CREDENTIALS_ATTR, "");
       contentType = getAttribute(attr, CONTENT_ATTR, "text");
@@ -259,7 +269,8 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         }
       } else {
         // Use query parameter as POST body
-        httpPostMethod.setRequestEntity(new StringRequestEntity(requestParameters.getParameter(parameterName)));
+        RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName));
+        httpPostMethod.setRequestEntity(reqentity);
         // Add other parameters to query string
         requestParameters.removeParameter(parameterName);
         if (requestParameters.getEncodedQueryString() != null) {
@@ -292,7 +303,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     Iterator<Map.Entry<String, String>> headers = httpHeaders.entrySet().iterator();
     while (headers.hasNext()) {
       Map.Entry<String, String> header = headers.next();
-      httpMethod.addRequestHeader((String) header.getKey(), (String) header.getValue());
+      httpMethod.addRequestHeader(header.getKey(), header.getValue());
     }
     // Declare some variables before the try-block.
     XMLizer xmlizer = null;
@@ -346,7 +357,9 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     } catch (ServiceException e) {
       throw new ProcessingException("Cannot find the right XMLizer for "+XMLizer.ROLE, e);
     } finally {
-        if (xmlizer != null) manager.release((Component) xmlizer);
+        if (xmlizer != null) {
+          manager.release(xmlizer);
+        }
         httpMethod.releaseConnection();
     }
   }
