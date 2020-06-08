@@ -54,6 +54,7 @@ import org.eclipse.jgit.dircache.DirCache;
 import static org.eclipse.jgit.lib.ObjectChecker.tree;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectReader;
+import org.eclipse.jgit.transport.RemoteRefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.DepthWalk.RevWalk;
@@ -99,6 +100,7 @@ import org.eclipse.jgit.treewalk.TreeWalk;
  *   </git:commit>
  *   <git:pull repository="..." account="..." password="..."/>
  *   <git:push repository="..." account="..." password="..."/>
+ *   <git:merge repository="..." from-branch="..." account="..." password="..."/>
  * }
  * </pre>
  * The @repository attribute specifies the path to the local repository that
@@ -127,30 +129,32 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String GIT_PREFIX = "git";
 
     private static final String INIT_ELEMENT = "init";
+    private static final String INITRESULT_ELEMENT = "init-result";
     private static final String CLONE_ELEMENT = "clone";
+    private static final String CLONERESULT_ELEMENT = "clone-result";
     private static final String STATUS_ELEMENT = "status";
+    private static final String STATUSRESULT_ELEMENT = "status-result";
     private static final String ADD_ELEMENT = "add";
+    private static final String ADDRESULT_ELEMENT = "add-result";
 //    private static final String IGNORE_ELEMENT = "ignore";
+//    private static final String IGNORERESULT_ELEMENT = "ignore-result";
 //    private static final String LIST_ELEMENT = "list";
+//    private static final String LISTRESULT_ELEMENT = "list-result";
     private static final String FETCH_ELEMENT = "fetch";
+    private static final String FETCHRESULT_ELEMENT = "fetch-result";
     private static final String DIFF_ELEMENT = "diff";
+    private static final String DIFFRESULT_ELEMENT = "diff-result";
     private static final String COMMIT_ELEMENT = "commit";
+    private static final String COMMITRESULT_ELEMENT = "commit-result";
     private static final String CHECKOUT_ELEMENT = "checkout";
+    private static final String CHECKOUTRESULT_ELEMENT = "checkout-result";
     private static final String COMMIT_MESSAGE_ELEMENT = "commit-message";
     private static final String PUSH_ELEMENT = "push";
-    private static final String PULL_ELEMENT = "pull";
-    
-    private static final String PULLRESULT_ELEMENT = "pull-result";
     private static final String PUSHRESULT_ELEMENT = "push-result";
-    private static final String ADDRESULT_ELEMENT = "add-result";
-//    private static final String IGNORERESULT_ELEMENT = "ignore-result";
-//    private static final String LISTRESULT_ELEMENT = "list-result";
-    private static final String FETCHRESULT_ELEMENT = "fetch-result";
-    private static final String DIFFRESULT_ELEMENT = "diff-result";
-    private static final String CHECKOUTRESULT_ELEMENT = "checkout-result";
-    private static final String STATUSRESULT_ELEMENT = "status-result";
-    private static final String INITRESULT_ELEMENT = "init-result";
-    private static final String CLONERESULT_ELEMENT = "clone-result";
+    private static final String PULL_ELEMENT = "pull";
+    private static final String PULLRESULT_ELEMENT = "pull-result";
+    private static final String MERGE_ELEMENT = "merge";
+    private static final String MERGERESULT_ELEMENT = "merge-result";
 
     private static final String REPOSITORY_ATTR = "repository";
     private static final String URL_ATTR = "url";
@@ -160,6 +164,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String ACCOUNT_ATTR = "account";
     private static final String FILE_ATTR = "file";
     private static final String BRANCH_ATTR = "branch";
+    private static final String FROMBRANCH_ATTR = "from-branch";
     private static final String OLDTREE_ATTR = "old-tree";
     private static final String NEWTREE_ATTR = "new-tree";
 
@@ -203,6 +208,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 final String account = getAttribute(attr, ACCOUNT_ATTR, null);
                 final String password = getAttribute(attr, PASSWORD_ATTR, null);
                 final String url = getAttribute(attr, URL_ATTR, null);
+                final String branch = getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH);
 
                 if (null == repository) {
                     throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
@@ -218,7 +224,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 
                 try (Git git = cloneCommand.setURI(url).
                         setCloneAllBranches(true).
-                        setBranch(MASTER_BRANCH).
+                        setBranch(branch).
                         setDirectory(directory).
                         call()) {
                        
@@ -527,7 +533,17 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                     }
                     Iterable<PushResult> pushResults = pushCommand.call();
                     sEr(PUSHRESULT_ELEMENT, repository);
-                    chars("Git push: " + pushResults.toString());
+                    chars("Git push: ");
+                    for (PushResult pr : pushResults) {
+                        Collection<RemoteRefUpdate> upds = pr.getRemoteUpdates();
+                        for (RemoteRefUpdate rro : upds) {
+                            String msg = rro.getMessage();
+                            if (null != msg) {
+                                chars(msg);
+                            }
+                        }
+                        chars("\n");
+                    }
                     eE(PUSHRESULT_ELEMENT);
 
                 } catch (Exception ex) {
@@ -577,7 +593,6 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 }
             }
             
-            
             else {
                 super.startTransformingElement(uri, name, raw, attr);
             }
@@ -597,10 +612,16 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                     PersonIdent personIdent = new PersonIdent(this.author_name, this.author_email);
                     try {
                         RevCommit revCommit = git.commit().setAllowEmpty(false).setAll(true).setMessage(this.commit_message).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
-                        
-                        sE(COMMITRESULT_ELEMENT);
-                        chars(revCommit.toString());
-                        eE(COMMITRESULT_ELEMENT);
+                        if (null == revCommit) {
+                            sE(COMMITRESULT_ELEMENT);
+                            chars("revCommit is NULL (commit.message="+this.commit_message+", author_name="+this.author_name+", author_email="+this.author_email+", repository="+this.repository+")");
+                            eE(COMMITRESULT_ELEMENT);
+                        }
+                        else {
+                            sE(COMMITRESULT_ELEMENT);
+                            chars(revCommit.toString());
+                            eE(COMMITRESULT_ELEMENT);
+                        }
                     } catch(org.eclipse.jgit.api.errors.EmtpyCommitException ex) {
                         sE(COMMITRESULT_ELEMENT);
                         chars("Empty commit");
@@ -619,7 +640,6 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
             super.endTransformingElement(uri, name, raw);
         }
     }
-    private static final String COMMITRESULT_ELEMENT = "commit-result";
 
     
     private void reset() {
