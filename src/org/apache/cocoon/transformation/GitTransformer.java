@@ -44,6 +44,7 @@ import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.DiffCommand;
 import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.MergeResult;
+import org.eclipse.jgit.api.ResetCommand.ResetType;
 import org.eclipse.jgit.api.errors.EmtpyCommitException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
@@ -51,6 +52,7 @@ import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.dircache.DirCache;
+import org.eclipse.jgit.merge.MergeStrategy;
 import static org.eclipse.jgit.lib.ObjectChecker.tree;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectReader;
@@ -436,32 +438,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 if (null == repository) {
                     throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
                 }
-
-                try (Git git = Git.open(new File(repository))) {
-                    final FetchCommand fetchCommand = git.fetch();
-                    if (null != account) {
-                        fetchCommand.setCredentialsProvider(new UsernamePasswordCredentialsProvider(account, password));
-                    }
-                    RefSpec spec = new RefSpec("refs/heads/*:refs/remotes/origin/*");
-                    final FetchResult fetchResult = fetchCommand.setRefSpecs(spec).setCheckFetchedObjects(true).call();
-
-                    sEa(FETCHRESULT_ELEMENT, new HashMap<String, String>() {{
-                        put("repository", repository);
-                        put("remote", fetchCommand.getRemote());
-                    }});
-                    Collection<TrackingRefUpdate> refUpdates = fetchResult.getTrackingRefUpdates();
-                    for (TrackingRefUpdate refUpdate : refUpdates) {
-                        Result result = refUpdate.getResult();
-                        chars(result.toString());
-                        chars(", ");
-                    }
-                    eE(FETCHRESULT_ELEMENT);
-                } catch (Exception ex) {
-                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
-                    throw new SAXException(ex);
-                } finally {
-                    reset();
-                }
+                doFetch(repository, account, password);
             } else if (name.equals(ADD_ELEMENT)) {
                 final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
                 String file = getAttribute(attr, FILE_ATTR, ".");
@@ -538,14 +515,19 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                 final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
                 final String account = getAttribute(attr, ACCOUNT_ATTR, null);
                 final String password = getAttribute(attr, PASSWORD_ATTR, null);
+                final String branch = getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH);
 
                 if (null == repository) {
                     throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
                 }
 
-                try (Git git = Git.open(new File(repository))) {
+                doFetch(repository, account, password);
 
-                    final PullCommand pullCommand = git.pull();
+                try (Git git = Git.open(new File(repository))) {
+                    // To simplify things and not end up with a Git-mess, do e hard rest to the remote branch first.
+                    git.reset().setMode(ResetType.HARD).setRef("refs/remotes/origin/"+branch).call();
+
+                    final PullCommand pullCommand = git.pull().setStrategy(MergeStrategy.THEIRS);
                     if (null != account) {
                         pullCommand.setCredentialsProvider(new UsernamePasswordCredentialsProvider(account, password));
                     }
@@ -618,6 +600,33 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         }
     }
 
+    private void doFetch(String repository, String account, String password) throws SAXException {
+        try (Git git = Git.open(new File(repository))) {
+            final FetchCommand fetchCommand = git.fetch();
+            if (null != account) {
+                fetchCommand.setCredentialsProvider(new UsernamePasswordCredentialsProvider(account, password));
+            }
+            RefSpec spec = new RefSpec("refs/heads/*:refs/remotes/origin/*");
+            final FetchResult fetchResult = fetchCommand.setRefSpecs(spec).setCheckFetchedObjects(true).call();
+
+            sEa(FETCHRESULT_ELEMENT, new HashMap<String, String>() {{
+                put("repository", repository);
+                put("remote", fetchCommand.getRemote());
+            }});
+            Collection<TrackingRefUpdate> refUpdates = fetchResult.getTrackingRefUpdates();
+            for (TrackingRefUpdate refUpdate : refUpdates) {
+                Result result = refUpdate.getResult();
+                chars(result.toString());
+                chars(", ");
+            }
+            eE(FETCHRESULT_ELEMENT);
+        } catch (Exception ex) {
+            Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+            throw new SAXException(ex);
+        } finally {
+            reset();
+        }
+    }
     
     private void reset() {
         this.repository = null;
