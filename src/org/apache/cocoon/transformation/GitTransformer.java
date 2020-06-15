@@ -186,6 +186,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
      * org.apache.avalon.framework.configuration.Configurable#configure(org.
      * apache.avalon.framework.configuration.Configuration)
      */
+@Override
     public void configure(Configuration configuration)
             throws ConfigurationException {
         super.configure(configuration);
