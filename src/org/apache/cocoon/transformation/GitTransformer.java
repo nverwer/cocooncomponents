@@ -191,6 +191,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         super.configure(configuration);
     }
 
+    @Override
     public void setup(SourceResolver resolver, Map objectModel, String src,
             Parameters params) throws ProcessingException, SAXException, IOException {
         super.setup(resolver, objectModel, src, params);
