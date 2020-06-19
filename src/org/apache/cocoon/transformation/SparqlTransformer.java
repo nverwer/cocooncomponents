@@ -135,6 +135,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public static final String DEFAULT_QUERY_PARAM = "query";
   public static final String HTTP_CONTENT_TYPE = "Content-Type";
 
+  private boolean logVerboseInfo;
   private boolean inQuery;
   private String src;
   private String method;
@@ -155,11 +156,16 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public void setup(SourceResolver resolver, @SuppressWarnings("rawtypes") Map objectModel, String src,
       Parameters params) throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectModel, src, params);
+    logVerboseInfo = params.getParameterAsBoolean("verbose", true); //TODO: Make false the default.
     inQuery = false;
   }
 
   private String getAttribute(Attributes attr, String name, String defaultValue) {
-    return (attr.getIndex(name) >= 0) ? attr.getValue(name) : defaultValue;
+    String attributeValue = (attr.getIndex(name) >= 0) ? attr.getValue(name) : defaultValue;
+    if (logVerboseInfo) {
+      getLogger().info(toString()+" @"+name+" = \""+attributeValue+"\"");
+    }
+    return attributeValue;
   }
 
   @Override
@@ -222,7 +228,9 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
     if (System.getProperty("http.proxyHost") != null) {
-      // getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
+      if (logVerboseInfo) {
+        getLogger().info("PROXY: "+System.getProperty("http.proxyHost"));
+      }
       String nonProxyHostsRE = System.getProperty("http.nonProxyHosts", "");
       if (nonProxyHostsRE.length() > 0) {
         String[] pHosts = nonProxyHostsRE.replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*").split("\\|");
@@ -256,6 +264,9 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       } else {
         httpMethod.setQueryString("");
       }
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" GET "+url+" ?"+httpMethod.getQueryString());
+      }
     } else if ("POST".equalsIgnoreCase(method)) {
       PostMethod httpPostMethod = new PostMethod(url);
       if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
@@ -266,6 +277,9 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         while (parNames.hasNext()) {
           String parName = parNames.next();
           httpPostMethod.addParameter(parName, requestParameters.getParameter(parName));
+        }
+        if (logVerboseInfo) {
+          getLogger().info(toString()+" POST application/x-www-form-urlencoded ("+httpPostMethod.getParameters().length+" parameters)");
         }
       } else {
         // Use query parameter as POST body
@@ -278,17 +292,27 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         } else {
           httpPostMethod.setQueryString("");
         }
+        if (logVerboseInfo) {
+          getLogger().info(toString()+" POST "+url+" with ["+parameterName+"] as body with length "+reqentity.getContentLength());
+        }
       }
       httpMethod = httpPostMethod;
     } else if ("PUT".equalsIgnoreCase(method)) {
       PutMethod httpPutMethod = new PutMethod(url);
-      httpPutMethod.setRequestEntity(new StringRequestEntity(requestParameters.getParameter(parameterName)));
+      RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName));
+      httpPutMethod.setRequestEntity(reqentity);
       requestParameters.removeParameter(parameterName);
       httpPutMethod.setQueryString(requestParameters.getEncodedQueryString());
       httpMethod = httpPutMethod;
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" PUT "+url+" with ["+parameterName+"] as body with length "+reqentity.getContentLength());
+      }
     } else if ("DELETE".equalsIgnoreCase(method)) {
       httpMethod = new DeleteMethod(url);
       httpMethod.setQueryString(requestParameters.getEncodedQueryString());
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" DELETE "+url);
+      }
     } else {
       throw new ProcessingException("Unsupported method: "+method);
     }
@@ -313,11 +337,14 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       String statusText = "";
       int responseCode;
       responseCode = httpclient.executeMethod(httpMethod);
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" response: "+responseCode+" "+httpMethod.getStatusText());
+      }
       // Handle errors, if any.
       if (responseCode < 200 || responseCode >= 300) {
         if (showErrors) {
           AttributesImpl attrs = new AttributesImpl();
-          attrs.addCDATAAttribute("status", ""+responseCode);
+          attrs.addCDATAAttribute("status", ""+responseCode+" "+httpMethod.getStatusText());
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
           responseBody = httpMethod.getResponseBodyAsString();
           statusText = httpMethod.getStatusText();
