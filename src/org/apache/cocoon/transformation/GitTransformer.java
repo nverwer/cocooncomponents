@@ -330,7 +330,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
 
             if (name.equals(COMMIT_ELEMENT)) {
                 if (null == this.commit_message) {
-                    throw new SAXException("Missing <git:commit-message/>.");
+                    throw new SAXException("Missing <git:"+COMMIT_MESSAGE_ELEMENT+"/>.");
                 }
                 try (Git git = Git.open(new File(this.repository))) {
                     // Commit everything
