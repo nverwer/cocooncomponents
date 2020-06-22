@@ -156,7 +156,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public void setup(SourceResolver resolver, @SuppressWarnings("rawtypes") Map objectModel, String src,
       Parameters params) throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectModel, src, params);
-    logVerboseInfo = params.getParameterAsBoolean("verbose", true); //TODO: Make false the default.
+    logVerboseInfo = params.getParameterAsBoolean("verbose", false);
     inQuery = false;
   }
 
