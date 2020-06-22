@@ -347,7 +347,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                             chars(revCommit.toString());
                             endElement(COMMITRESULT_ELEMENT);
                         }
-                    } catch(org.eclipse.jgit.api.errors.EmtpyCommitException ex) {
+                    } catch (org.eclipse.jgit.api.errors.EmtpyCommitException ex) {
                         startElement(COMMITRESULT_ELEMENT);
                         chars("Empty commit");
                         endElement(COMMITRESULT_ELEMENT);
