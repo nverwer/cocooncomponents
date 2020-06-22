@@ -201,126 +201,69 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         reset();
     }
 
-    private String getAttribute(Attributes attr, String name, String defaultValue) {
-        return (attr.getIndex(name) >= 0) ? attr.getValue(name) : defaultValue;
+    private String getAttribute(Attributes attr, String name) throws SAXException {
+        return getAttribute(attr, name, null);
+    }
+    private String getAttribute(Attributes attr, String name, String defaultValue) throws SAXException {
+        if (attr.getIndex(name) >= 0) {
+            return attr.getValue(name);
+        } else if (null != defaultValue) {
+            return defaultValue;
+        } else {
+            throw new SAXException(java.lang.String.format("Missing @%s attribute.", name));
+        }
     }
 
     public void startTransformingElement(String uri, String name, String raw, Attributes attr)
             throws ProcessingException, IOException, SAXException {
         if (uri.equals(GIT_NAMESPACE_URI)) {
-            
-            if (name.equals(CLONE_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                final String account = getAttribute(attr, ACCOUNT_ATTR, null);
-                final String password = getAttribute(attr, PASSWORD_ATTR, null);
-                final String url = getAttribute(attr, URL_ATTR, null);
-                final String branch = getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH);
 
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doClone(repository, account, password, url, branch);
+            switch(name) {
+                case CLONE_ELEMENT:
+                    doClone(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR), getAttribute(attr, URL_ATTR), getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH));
+                    break;
+                case INIT_ELEMENT:
+                    doInit(getAttribute(attr, REPOSITORY_ATTR));
+                    break;
+                case STATUS_ELEMENT:
+                    doStatus(getAttribute(attr, REPOSITORY_ATTR));
+                    break;
+                case LIST_ELEMENT:
+                    doList(getAttribute(attr, REPOSITORY_ATTR));
+                    break;
+                case CHECKOUT_ELEMENT:
+                    doCheckout(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH));
+                    break;
+                case DIFF_ELEMENT:
+                    doDiff(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, OLDTREE_ATTR, "HEAD^{tree}"), getAttribute(attr, NEWTREE_ATTR, "FETCH_HEAD^{tree}"));
+                    break;
+                case FETCH_ELEMENT:
+                    doFetch(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR));
+                    break;
+                case ADD_ELEMENT:
+                    doAdd(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, FILE_ATTR, "."));
+                    break;
+                case COMMIT_ELEMENT:
+                    this.repository = getAttribute(attr, REPOSITORY_ATTR);
+                    this.author_name = getAttribute(attr, AUTHORNAME_ATTR);
+                    this.author_email = getAttribute(attr, AUTHOREMAIL_ATTR);
+                    break;
+                case COMMIT_MESSAGE_ELEMENT:
+                    startTextRecording();
+                    break;
+                case PUSH_ELEMENT:
+                    doPush(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR));
+                    break;
+                case PULL_ELEMENT:
+                    doFetch(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR));
+                    doPull(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR), getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH));
+                    break;
+                default:
+                    throw new SAXException(java.lang.String.format("Unknown GitTransformer element @%s.", name);
             }
-            else if (name.equals(INIT_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doInit(repository);
-            }
-            else if (name.equals(STATUS_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doStatus(repository);
-            }
-            else if (name.equals(LIST_ELEMENT)) {
-
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doList(repository);
-            }
-            else if (name.equals(CHECKOUT_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                final String branch = getAttribute(attr, BRANCH_ATTR, "master");
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doCheckout(repository, branch);
-            } else if (name.equals(DIFF_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                final String oldTree = getAttribute(attr, OLDTREE_ATTR, "HEAD^{tree}");
-                final String newTree = getAttribute(attr, NEWTREE_ATTR, "FETCH_HEAD^{tree}");
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doDiff(repository, oldTree, newTree);
-
-            } else if (name.equals(FETCH_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                final String account = getAttribute(attr, ACCOUNT_ATTR, null);
-                final String password = getAttribute(attr, PASSWORD_ATTR, null);
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doFetch(repository, account, password);
-            } else if (name.equals(ADD_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                String file = getAttribute(attr, FILE_ATTR, ".");
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-
-                doAdd(repository, file);
-            } else if (name.equals(COMMIT_ELEMENT)) {
-                this.repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                this.author_name = getAttribute(attr, AUTHORNAME_ATTR, null);
-                this.author_email = getAttribute(attr, AUTHOREMAIL_ATTR, null);
-                if (null == this.repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                if (null == this.author_name) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", AUTHORNAME_ATTR));
-                }
-                if (null == this.author_email) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", AUTHOREMAIL_ATTR));
-                }
-            } else if (name.equals(COMMIT_MESSAGE_ELEMENT)) {
-                startTextRecording();
-            } else if (name.equals(PUSH_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                final String account = getAttribute(attr, ACCOUNT_ATTR, null);
-                final String password = getAttribute(attr, PASSWORD_ATTR, null);
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-                doPush(repository, account, password);
-            } else if (name.equals(PULL_ELEMENT)) {
-                final String repository = getAttribute(attr, REPOSITORY_ATTR, null);
-                final String account = getAttribute(attr, ACCOUNT_ATTR, null);
-                final String password = getAttribute(attr, PASSWORD_ATTR, null);
-                final String branch = getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH);
-
-                if (null == repository) {
-                    throw new SAXException(java.lang.String.format("Missing @%s attribute.", REPOSITORY_ATTR));
-                }
-
-                doFetch(repository, account, password);
-                doPull(repository, account, password, branch);
-            } else {
-                super.startTransformingElement(uri, name, raw, attr);
-            }
+        }
+        else {
+            super.startTransformingElement(uri, name, raw, attr);
         }
     }
 
@@ -328,38 +271,41 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
             throws ProcessingException, IOException, SAXException {
         if (uri.equals(GIT_NAMESPACE_URI)) {
 
-            if (name.equals(COMMIT_ELEMENT)) {
-                if (null == this.commit_message) {
-                    throw new SAXException("Missing <git:"+COMMIT_MESSAGE_ELEMENT+"/>.");
-                }
-                try (Git git = Git.open(new File(this.repository))) {
-                    // Commit everything
-                    PersonIdent personIdent = new PersonIdent(this.author_name, this.author_email);
-                    try {
-                        RevCommit revCommit = git.commit().setAllowEmpty(false).setAll(true).setMessage(this.commit_message).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
-                        if (null == revCommit) {
-                            startElement(COMMITRESULT_ELEMENT);
-                            chars("revCommit is NULL (commit.message="+this.commit_message+", author_name="+this.author_name+", author_email="+this.author_email+", repository="+this.repository+")");
-                            endElement(COMMITRESULT_ELEMENT);
-                        }
-                        else {
-                            startElement(COMMITRESULT_ELEMENT);
-                            chars(revCommit.toString());
-                            endElement(COMMITRESULT_ELEMENT);
-                        }
-                    } catch (org.eclipse.jgit.api.errors.EmtpyCommitException ex) {
-                        startElement(COMMITRESULT_ELEMENT);
-                        chars("Empty commit");
-                        endElement(COMMITRESULT_ELEMENT);
+            switch (name) {
+                case COMMIT_ELEMENT:
+                    if (null == this.commit_message) {
+                        throw new SAXException("Missing <git:"+COMMIT_MESSAGE_ELEMENT+"/>.");
                     }
-                } catch (Exception ex) {
-                    Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
-                    throw new SAXException(ex);
-                } finally {
-                    reset();
-                }
-            } else if (name.equals(COMMIT_MESSAGE_ELEMENT)) {
-                this.commit_message = endTextRecording();
+                    try (Git git = Git.open(new File(this.repository))) {
+                        // Commit everything
+                        PersonIdent personIdent = new PersonIdent(this.author_name, this.author_email);
+                        try {
+                            RevCommit revCommit = git.commit().setAllowEmpty(false).setAll(true).setMessage(this.commit_message).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
+                            if (null == revCommit) {
+                                startElement(COMMITRESULT_ELEMENT);
+                                chars("revCommit is NULL (commit.message="+this.commit_message+", author_name="+this.author_name+", author_email="+this.author_email+", repository="+this.repository+")");
+                                endElement(COMMITRESULT_ELEMENT);
+                            }
+                            else {
+                                startElement(COMMITRESULT_ELEMENT);
+                                chars(revCommit.toString());
+                                endElement(COMMITRESULT_ELEMENT);
+                            }
+                        } catch (org.eclipse.jgit.api.errors.EmtpyCommitException ex) {
+                            startElement(COMMITRESULT_ELEMENT);
+                            chars("Empty commit");
+                            endElement(COMMITRESULT_ELEMENT);
+                        }
+                    } catch (Exception ex) {
+                        Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+                        throw new SAXException(ex);
+                    } finally {
+                        reset();
+                    }
+                    break;
+                case COMMIT_MESSAGE_ELEMENT:
+                    this.commit_message = endTextRecording();
+                    break;
             }
         } else {
             super.endTransformingElement(uri, name, raw);
