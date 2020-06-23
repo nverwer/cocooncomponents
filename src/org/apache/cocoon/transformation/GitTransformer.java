@@ -68,10 +68,10 @@ import java.util.logging.Logger;
  *   <git:init repository="..."/>
  *   <git:status repository="..."/>
  *   <git:fetch repository="..."/>
- *   <!-- <git:list repository="..."/> -->
+ *   <git:list repository="..."/>
  *   <git:diff repository="..." old-tree="..." new-tree="..."/>
  *   <git:checkout repository="..." branch="..."/>
- *   <git:clone repository="..." account="..." password="..." url="https://..."/>
+ *   <git:clone repository="..." account="..." password="..." remote="https://..."/>
  *   <git:add repository="..." file="..."/>
  *   <!-- <git:ignore repository="..." file="..."/> -->
  *   <git:commit repository="..." author-name="..." author-email="...">
@@ -83,23 +83,23 @@ import java.util.logging.Logger;
  * }
  * </pre>
  * The @repository attribute specifies the path to the local repository that
- * is to be used. 
- * When cloning the @url is mandatory.
+ * is to be used.
+ * When cloning the @remote is mandatory.
  * When adding, @file defaults to "." (= all files).
  * With checkout, @file defaults to "master".
  * When committing @author-name and @author-email are mandatory.
- * @account and @password can be used when authentication is necessary.
- * All output is in elements &lt;git:<action>-result>, e.g. &lt;git:init-result>.
  *
- *       <map:transformer logger="sitemap.transformer.git" name="git"
- *           pool-grow="2" pool-max="32" pool-min="8"
- *           src="org.apache.cocoon.transformation.GitTransformer">
- *       </map:transformer>
- *
- * <p>
  * @author Huib Verweij (hhv@x-scale.nl)
  * </p>
+ * @account and @password can be used when authentication is necessary.
+ * All output is in elements &lt;git:<action>-result>, e.g. &lt;git:init-result>.
+ * <p>
+ * <map:transformer logger="sitemap.transformer.git" name="git"
+ * pool-grow="2" pool-max="32" pool-min="8"
+ * src="org.apache.cocoon.transformation.GitTransformer">
+ * </map:transformer>
  *
+ * <p>
  */
 public class GitTransformer extends AbstractSAXPipelineTransformer {
 
@@ -134,7 +134,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String MERGERESULT_ELEMENT = "merge-result";
 
     private static final String REPOSITORY_ATTR = "repository";
-    private static final String URL_ATTR = "url";
+    private static final String REMOTE_ATTR = "remote";
     private static final String AUTHORNAME_ATTR = "author-name";
     private static final String AUTHOREMAIL_ATTR = "author-email";
     private static final String PASSWORD_ATTR = "password";
@@ -149,7 +149,6 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String FILE_ELEMENT = "file";
     private static final String OBJECT_ID_ATTR = "object-id";
     private static final String NAME_ATTR = "name";
-    private static final String REMOTE_ATTR = "remote";
     private static final String REMOTE_BRANCH_ATTR = "remote-branch";
     private static final String FETCHED_FROM_ATTR = "fetched-from";
     private static final String FETCH_MESSAGES_ATTR = "fetch-messages";
@@ -172,10 +171,17 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String UNTRACKED_ELEMENT = "untracked";
     private static final String UNTRACKEDFOLDERS_ELEMENT = "untrackedfolders";
 
-    private String commit_message;
+    private String commitMessage;
     private String repository;
-    private String author_name;
-    private String author_email;
+    private String remote;
+    private String account;
+    private String password;
+    private String branch;
+    private String file;
+    private String oldTree;
+    private String newTree;
+    private String authorName;
+    private String authorEmail;
 
     public GitTransformer() {
         this.defaultNamespaceURI = GIT_NAMESPACE_URI;
@@ -196,14 +202,30 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
 
     @Override
     public void setup(SourceResolver resolver, Map objectModel, String src,
-            Parameters params) throws ProcessingException, SAXException, IOException {
+                      Parameters params) throws ProcessingException, SAXException, IOException {
         super.setup(resolver, objectModel, src, params);
+        reset();
+        this.repository = src;
+        this.branch = params.getParameter(BRANCH_ATTR, MASTER_BRANCH);
+        this.remote = params.getParameter(REMOTE_ATTR, "");
+        this.account = params.getParameter(ACCOUNT_ATTR, "");
+        this.password = params.getParameter(PASSWORD_ATTR, "");
+        this.file = params.getParameter(FILE_ATTR, "");
+        this.oldTree = params.getParameter(OLDTREE_ATTR, "HEAD^{tree}");
+        this.newTree = params.getParameter(NEWTREE_ATTR, "FETCH_HEAD^{tree}");
+        this.authorName = params.getParameter(AUTHORNAME_ATTR, "");
+        this.authorEmail = params.getParameter(AUTHOREMAIL_ATTR, "");
+    }
+
+    @Override
+    public void recycle() {
         reset();
     }
 
     private String getAttribute(Attributes attr, String name) throws SAXException {
         return getAttribute(attr, name, null);
     }
+
     private String getAttribute(Attributes attr, String name, String defaultValue) throws SAXException {
         if (attr.getIndex(name) >= 0) {
             return attr.getValue(name);
@@ -218,51 +240,47 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
             throws ProcessingException, IOException, SAXException {
         if (uri.equals(GIT_NAMESPACE_URI)) {
 
-            switch(name) {
+            switch (name) {
                 case CLONE_ELEMENT:
-                    doClone(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR), getAttribute(attr, URL_ATTR), getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH));
+                    doClone();
                     break;
                 case INIT_ELEMENT:
-                    doInit(getAttribute(attr, REPOSITORY_ATTR));
+                    doInit();
                     break;
                 case STATUS_ELEMENT:
-                    doStatus(getAttribute(attr, REPOSITORY_ATTR));
+                    doStatus();
                     break;
                 case LIST_ELEMENT:
-                    doList(getAttribute(attr, REPOSITORY_ATTR));
+                    doList();
                     break;
                 case CHECKOUT_ELEMENT:
-                    doCheckout(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH));
+                    doCheckout();
                     break;
                 case DIFF_ELEMENT:
-                    doDiff(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, OLDTREE_ATTR, "HEAD^{tree}"), getAttribute(attr, NEWTREE_ATTR, "FETCH_HEAD^{tree}"));
+                    doDiff();
                     break;
                 case FETCH_ELEMENT:
-                    doFetch(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR));
+                    doFetch();
                     break;
                 case ADD_ELEMENT:
-                    doAdd(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, FILE_ATTR, "."));
+                    doAdd();
                     break;
                 case COMMIT_ELEMENT:
-                    this.repository = getAttribute(attr, REPOSITORY_ATTR);
-                    this.author_name = getAttribute(attr, AUTHORNAME_ATTR);
-                    this.author_email = getAttribute(attr, AUTHOREMAIL_ATTR);
                     break;
                 case COMMIT_MESSAGE_ELEMENT:
                     startTextRecording();
                     break;
                 case PUSH_ELEMENT:
-                    doPush(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR));
+                    doPush();
                     break;
                 case PULL_ELEMENT:
-                    doFetch(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR));
-                    doPull(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR), getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH));
+                    doFetch();
+                    doPull();
                     break;
                 default:
-                    throw new SAXException(java.lang.String.format("Unknown GitTransformer element @%s.", name);
+                    throw new SAXException(java.lang.String.format("Unknown GitTransformer element @%s.", name));
             }
-        }
-        else {
+        } else {
             super.startTransformingElement(uri, name, raw, attr);
         }
     }
@@ -273,38 +291,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
 
             switch (name) {
                 case COMMIT_ELEMENT:
-                    if (null == this.commit_message) {
-                        throw new SAXException("Missing <git:"+COMMIT_MESSAGE_ELEMENT+"/>.");
-                    }
-                    try (Git git = Git.open(new File(this.repository))) {
-                        // Commit everything
-                        PersonIdent personIdent = new PersonIdent(this.author_name, this.author_email);
-                        try {
-                            RevCommit revCommit = git.commit().setAllowEmpty(false).setAll(true).setMessage(this.commit_message).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
-                            if (null == revCommit) {
-                                startElement(COMMITRESULT_ELEMENT);
-                                chars("revCommit is NULL (commit.message="+this.commit_message+", author_name="+this.author_name+", author_email="+this.author_email+", repository="+this.repository+")");
-                                endElement(COMMITRESULT_ELEMENT);
-                            }
-                            else {
-                                startElement(COMMITRESULT_ELEMENT);
-                                chars(revCommit.toString());
-                                endElement(COMMITRESULT_ELEMENT);
-                            }
-                        } catch (org.eclipse.jgit.api.errors.EmtpyCommitException ex) {
-                            startElement(COMMITRESULT_ELEMENT);
-                            chars("Empty commit");
-                            endElement(COMMITRESULT_ELEMENT);
-                        }
-                    } catch (Exception ex) {
-                        Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
-                        throw new SAXException(ex);
-                    } finally {
-                        reset();
-                    }
+                    doCommit();
                     break;
                 case COMMIT_MESSAGE_ELEMENT:
-                    this.commit_message = endTextRecording();
+                    this.commitMessage = endTextRecording();
                     break;
             }
         } else {
@@ -312,37 +302,36 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         }
     }
 
-    private void doClone(String repository, String account, String password, String url, String branch) throws SAXException {
+    private void doClone() throws SAXException {
 
-        File directory = new File(repository);
+        File directory = new File(this.repository);
 
         CloneCommand cloneCommand = Git.cloneRepository();
 
         if (null != account) {
-            cloneCommand.setCredentialsProvider(new UsernamePasswordCredentialsProvider(account, password));
+            cloneCommand.setCredentialsProvider(new UsernamePasswordCredentialsProvider(this.account, this.password));
         }
 
-        try (Git git = cloneCommand.setURI(url).
+        try (Git git = cloneCommand.setURI(this.remote).
                 setCloneAllBranches(true).
-                setBranch(branch).
+                setBranch(this.branch).
                 setDirectory(directory).
                 call()) {
             startElement(CLONERESULT_ELEMENT,
                     new EnhancedAttributesImpl().
-                            addAttribute(REPOSITORY_ATTR, repository));
-            chars("Git repository " + git.getRepository().getDirectory().toString() + " cloned from " + url);
+                            addAttribute(REPOSITORY_ATTR, this.repository));
+            chars("Git repository " + git.getRepository().getDirectory().toString() + " cloned from " + this.remote);
             endElement(CLONERESULT_ELEMENT);
 
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
-    private void doInit(String repository) throws SAXException {
 
-        File directory = new File(repository);
+    private void doInit() throws SAXException {
+
+        File directory = new File(this.repository);
 
         try (Git git = Git.init().setDirectory(directory).call()) {
             startElement(INITRESULT_ELEMENT,
@@ -354,12 +343,39 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
-    private void doStatus(String repository) throws SAXException {
+    private void doCommit() throws SAXException {
+        if (null == this.commitMessage) {
+            throw new SAXException("Missing <git:" + COMMIT_MESSAGE_ELEMENT + "/>.");
+        }
+        try (Git git = Git.open(new File(this.repository))) {
+            // Commit everything
+            PersonIdent personIdent = new PersonIdent(this.authorName, this.authorEmail);
+            try {
+                RevCommit revCommit = git.commit().setAllowEmpty(false).setAll(true).setMessage(this.commitMessage).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
+                if (null == revCommit) {
+                    startElement(COMMITRESULT_ELEMENT);
+                    chars("revCommit is NULL (commit.message=" + this.commitMessage + ", author_name=" + this.authorName + ", author_email=" + this.authorEmail + ", repository=" + this.repository + ")");
+                    endElement(COMMITRESULT_ELEMENT);
+                } else {
+                    startElement(COMMITRESULT_ELEMENT);
+                    chars(revCommit.toString());
+                    endElement(COMMITRESULT_ELEMENT);
+                }
+            } catch (org.eclipse.jgit.api.errors.EmtpyCommitException ex) {
+                startElement(COMMITRESULT_ELEMENT);
+                chars("Empty commit");
+                endElement(COMMITRESULT_ELEMENT);
+            }
+        } catch (Exception ex) {
+            Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
+            throw new SAXException(ex);
+        }
+    }
+
+    private void doStatus() throws SAXException {
 
         try (Git git = Git.open(new File(repository))) {
             Repository repo = git.getRepository();
@@ -384,12 +400,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
-    private void doList(String repository) throws SAXException {
+    private void doList() throws SAXException {
 
         RevWalk walk = null;
         try (Git git = Git.open(new File(repository))) {
@@ -429,12 +443,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
             if (null != walk) {
                 walk.dispose();
             }
-            reset();
         }
     }
 
-
-    private void doCheckout(String repository, String branch) throws SAXException {
+    private void doCheckout() throws SAXException {
         try (Git git = Git.open(new File(repository))) {
             final Ref ref = git.checkout().setName(branch).call();
             startElement(CHECKOUTRESULT_ELEMENT,
@@ -446,12 +458,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
-    private void doDiff(String repository, String oldTree, String newTree) throws SAXException  {
+    private void doDiff() throws SAXException {
 
         try (Git git = Git.open(new File(repository))) {
             DiffCommand diffCommand = git.diff();
@@ -497,12 +507,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
-    private void doPush(String repository, String account, String password) throws SAXException  {
+    private void doPush() throws SAXException {
 
         try (Git git = Git.open(new File(repository))) {
 
@@ -529,12 +537,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
-    private void doAdd(String repository, String file) throws SAXException {
+    private void doAdd() throws SAXException {
         try (Git git = Git.open(new File(repository))) {
             DirCache dirCache = git.add().addFilepattern(file).call();
             startElement(ADDRESULT_ELEMENT,
@@ -545,13 +551,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
-
-    private void doFetch(String repository, String account, String password) throws SAXException {
+    private void doFetch() throws SAXException {
         try (Git git = Git.open(new File(repository))) {
             final FetchCommand fetchCommand = git.fetch();
             if (null != account) {
@@ -576,13 +579,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
-
-    private void doPull(String repository, String account, String password, String branch) throws SAXException {
+    private void doPull() throws SAXException {
         try (Git git = Git.open(new File(repository))) {
             // To simplify things and not end up with a Git-mess, do e hard rest to the remote branch first.
             git.reset().setMode(ResetType.HARD).setRef("refs/remotes/origin/" + branch).call();
@@ -609,16 +609,14 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         } catch (Exception ex) {
             Logger.getLogger(GitTransformer.class.getName()).log(Level.SEVERE, null, ex);
             throw new SAXException(ex);
-        } finally {
-            reset();
         }
     }
 
     private void reset() {
         this.repository = null;
-        this.author_name = null;
-        this.author_email = null;
-        this.commit_message = null;
+        this.authorName = null;
+        this.authorEmail = null;
+        this.commitMessage = null;
     }
 
     /*
@@ -674,6 +672,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         public EnhancedAttributesImpl() {
             //return this;
         }
+
         public EnhancedAttributesImpl addAttribute(String key, String value) {
             this.addCDATAAttribute(key, value);
             return this;
