@@ -133,6 +133,12 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private static final String MERGE_ELEMENT = "merge";
     private static final String MERGERESULT_ELEMENT = "merge-result";
 
+    private static final String PARAM_REMOTE = "remote";
+    private static final String PARAM_ACCOUNT = "account";
+    private static final String PARAM_PASSWORD = "password";
+    private static final String PARAM_AUTHORNAME = "author-name";
+    private static final String PARAM_AUTHOREMAIL = "author-email";
+
     private static final String REPOSITORY_ATTR = "repository";
     private static final String REMOTE_ATTR = "remote";
     private static final String AUTHORNAME_ATTR = "author-name";
@@ -197,6 +203,11 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     @Override
     public void configure(Configuration configuration)
             throws ConfigurationException {
+        this.remote = configuration.getChild(PARAM_REMOTE).getValue();
+        this.account = configuration.getChild(PARAM_ACCOUNT).getValue();
+        this.password = configuration.getChild(PARAM_PASSWORD).getValue();
+        this.authorName = configuration.getChild(PARAM_AUTHORNAME).getValue();
+        this.authorEmail = configuration.getChild(PARAM_AUTHOREMAIL).getValue();
         super.configure(configuration);
     }
 
@@ -207,14 +218,9 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         reset();
         this.repository = src;
         this.branch = params.getParameter(BRANCH_ATTR, MASTER_BRANCH);
-        this.remote = params.getParameter(REMOTE_ATTR, "");
-        this.account = params.getParameter(ACCOUNT_ATTR, "");
-        this.password = params.getParameter(PASSWORD_ATTR, "");
         this.file = params.getParameter(FILE_ATTR, "");
         this.oldTree = params.getParameter(OLDTREE_ATTR, "HEAD^{tree}");
         this.newTree = params.getParameter(NEWTREE_ATTR, "FETCH_HEAD^{tree}");
-        this.authorName = params.getParameter(AUTHORNAME_ATTR, "");
-        this.authorEmail = params.getParameter(AUTHOREMAIL_ATTR, "");
     }
 
     @Override
@@ -376,14 +382,13 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     }
 
     private void doStatus() throws SAXException {
-
-        try (Git git = Git.open(new File(repository))) {
+        try (Git git = Git.open(new File(this.repository))) {
             Repository repo = git.getRepository();
             final DirCache dirCache = repo.readDirCache();
             final Status status = git.status().call();
             startElement(STATUSRESULT_ELEMENT,
                     new EnhancedAttributesImpl().
-                            addAttribute(REPOSITORY_ATTR, repository).
+                            addAttribute(REPOSITORY_ATTR, this.repository).
                             addAttribute(BRANCH_ATTR, repo.getFullBranch()).
                             addAttribute(NR_OF_FILES_ATTR, String.valueOf(dirCache.getEntryCount())));
             fileList(ADDED_ELEMENT, status.getAdded());
@@ -623,7 +628,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
      *  Generate a XML opening tag without attributes in the output stream.
      */
     private void startElement(String elementName) throws SAXException {
-        startElement(elementName, null);
+        startElement(elementName, new AttributesImpl());
     }
 
     /*
