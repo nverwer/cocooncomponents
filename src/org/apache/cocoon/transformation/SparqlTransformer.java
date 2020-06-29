@@ -156,7 +156,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public void setup(SourceResolver resolver, @SuppressWarnings("rawtypes") Map objectModel, String src,
       Parameters params) throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectModel, src, params);
-    logVerboseInfo = params.getParameterAsBoolean("verbose", true); //TODO: Make false the default.
+    logVerboseInfo = params.getParameterAsBoolean("verbose", false);
     inQuery = false;
   }
 
@@ -270,7 +270,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     } else if ("POST".equalsIgnoreCase(method)) {
       PostMethod httpPostMethod = new PostMethod(url);
       if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
-          httpHeaders.get(HTTP_CONTENT_TYPE).startsWith("application/x-www-form-urlencoded")) {
+          httpHeaders.get(HTTP_CONTENT_TYPE).startsWith(PostMethod.FORM_URL_ENCODED_CONTENT_TYPE)) {
         // Encode parameters in POST body.
         @SuppressWarnings("unchecked")
         Iterator<String> parNames = requestParameters.getParameterNames();
@@ -342,13 +342,13 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       }
       // Handle errors, if any.
       if (responseCode < 200 || responseCode >= 300) {
+        responseBody = httpMethod.getResponseBodyAsString();
+        statusText = httpMethod.getStatusText();
         if (showErrors) {
           AttributesImpl attrs = new AttributesImpl();
-          attrs.addCDATAAttribute("status", ""+responseCode+" "+httpMethod.getStatusText());
+          attrs.addCDATAAttribute("status", ""+responseCode+" "+statusText);
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
-          responseBody = httpMethod.getResponseBodyAsString();
-          statusText = httpMethod.getStatusText();
-          xmlConsumer.characters(responseBody.toCharArray(), 0, statusText.length());
+          xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
         } else {
           throw new ProcessingException("Received HTTP status code "+responseCode+" "+statusText+":\n"+responseBody);
