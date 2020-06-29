@@ -333,26 +333,11 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     XMLizer xmlizer = null;
     try {
       // Execute the request.
-      String responseBody = "";
-      String statusText = "";
-      int responseCode;
-      responseCode = httpclient.executeMethod(httpMethod);
+      int responseCode = httpclient.executeMethod(httpMethod);
+      // Receive the response.
+      String statusText = httpMethod.getStatusText();
       if (logVerboseInfo) {
         getLogger().info(toString()+" response: "+responseCode+" "+httpMethod.getStatusText());
-      }
-      // Handle errors, if any.
-      if (responseCode < 200 || responseCode >= 300) {
-        responseBody = httpMethod.getResponseBodyAsString();
-        statusText = httpMethod.getStatusText();
-        if (showErrors) {
-          AttributesImpl attrs = new AttributesImpl();
-          attrs.addCDATAAttribute("status", ""+responseCode+" "+httpMethod.getStatusText());
-          xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
-          xmlConsumer.characters(responseBody.toCharArray(), 0, statusText.length());
-          xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
-        } else {
-          throw new ProcessingException("Received HTTP status code "+responseCode+" "+statusText+":\n"+responseBody);
-        }
       }
       if (showResponseHeaders) {
         xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "response-headers", "sparql:response-headers", EMPTY_ATTRIBUTES);
@@ -364,14 +349,28 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         }
         xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "response-headers", "sparql:response-headers");
       }
-      // Parse the response
-      else {
+      if (responseCode < 200 || responseCode >= 300) {
+        // Handle errors.
+        String responseBody = "";
+        try {
+          responseBody = httpMethod.getResponseBodyAsString();
+        } catch (Exception e) {}
+        if (showErrors) {
+          AttributesImpl attrs = new AttributesImpl();
+          attrs.addCDATAAttribute("status", ""+responseCode+" "+statusText);
+          xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
+          xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
+          xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
+        } else {
+          throw new ProcessingException("Received HTTP status code "+responseCode+" "+statusText+":\n"+responseBody);
+        }
+      } else {
+        // Parse the response.
         if (responseCode == 204) { // No content.
-          String statusLine = httpMethod.getStatusLine().toString();
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
+          String statusLine = httpMethod.getStatusLine().toString();
           xmlConsumer.characters(statusLine.toCharArray(), 0, statusLine.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
-          httpMethod.getResponseBodyAsString();
         } else if (parse.equalsIgnoreCase("xml")) {
           InputStream responseBodyStream = httpMethod.getResponseBodyAsStream();
           xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
@@ -379,7 +378,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
           responseBodyStream.close();
         } else if (parse.equalsIgnoreCase("text")) {
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
-          responseBody = httpMethod.getResponseBodyAsString();
+          String responseBody = httpMethod.getResponseBodyAsString();
           xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
         } else {
