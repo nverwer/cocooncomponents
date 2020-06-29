@@ -346,9 +346,9 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         statusText = httpMethod.getStatusText();
         if (showErrors) {
           AttributesImpl attrs = new AttributesImpl();
-          attrs.addCDATAAttribute("status", ""+responseCode+" "+httpMethod.getStatusText());
+          attrs.addCDATAAttribute("status", ""+responseCode+" "+statusText);
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
-          xmlConsumer.characters(responseBody.toCharArray(), 0, statusText.length());
+          xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
         } else {
           throw new ProcessingException("Received HTTP status code "+responseCode+" "+statusText+":\n"+responseBody);
