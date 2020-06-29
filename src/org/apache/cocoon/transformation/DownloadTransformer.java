@@ -13,7 +13,6 @@ import java.util.zip.ZipEntry;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
-import org.apache.cocoon.transformation.AbstractTransformer;
 import org.apache.commons.httpclient.HostConfiguration;
 import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.HttpMethod;
@@ -81,35 +80,43 @@ import org.xml.sax.helpers.AttributesImpl;
  * @author <a href="mailto:maarten.kroon@koop.overheid.nl">Maarten Kroon</a>
  * @author <a href="mailto:hhv@x-scale.nl">Huib Verweij</a>
  */
-public class DownloadTransformer extends AbstractTransformer {
+public class DownloadTransformer extends AbstractSAXTransformer {
 
     public static final String DOWNLOAD_NS = "http://apache.org/cocoon/download/1.0";
 
     public static final String DOWNLOAD_ELEMENT = "download";
+    private static final String DOWNLOAD_PREFIX = "download";
     public static final String RESULT_ELEMENT = "result";
     public static final String ERROR_ELEMENT = "error";
     public static final String SRC_ATTRIBUTE = "src";
     public static final String TARGET_ATTRIBUTE = "target";
     public static final String TARGETDIR_ATTRIBUTE = "target-dir";
     public static final String UNZIP_ATTRIBUTE = "unzip";
+    public static final String RECURSIVE_UNZIP_ATTRIBUTE = "recursive-unzip";
     public static final String UNZIPPED_ATTRIBUTE = "unzipped";
     
-    @SuppressWarnings("rawtypes")
-    @Override
-    public void setup(SourceResolver sourceResolver, Map model, String src,
-            Parameters params) throws ProcessingException, SAXException, IOException {
+    
+    public DownloadTransformer() {
+        this.defaultNamespaceURI = DOWNLOAD_NS;
     }
 
     @Override
-    public void startElement(String namespaceURI, String localName,
-            String qName, Attributes attributes) throws SAXException {
-        if (DOWNLOAD_NS.equals(namespaceURI) && DOWNLOAD_ELEMENT.equals(localName)) {
+    public void setup(SourceResolver resolver, Map objectModel, String src,
+            Parameters params) throws ProcessingException, SAXException, IOException {
+        super.setup(resolver, objectModel, src, params);
+    }
+    
+    @Override
+    public void startTransformingElement(String uri, String localName,
+            String qName, Attributes attributes) throws SAXException, ProcessingException, IOException {
+        if (DOWNLOAD_NS.equals(uri) && DOWNLOAD_ELEMENT.equals(localName)) {
             try {
                 File[] downloadResult = download(
                     attributes.getValue(SRC_ATTRIBUTE), 
                     attributes.getValue(TARGETDIR_ATTRIBUTE),
                     attributes.getValue(TARGET_ATTRIBUTE),
-                    attributes.getValue(UNZIP_ATTRIBUTE)
+                    attributes.getValue(UNZIP_ATTRIBUTE),
+                    attributes.getValue(RECURSIVE_UNZIP_ATTRIBUTE)
                 );
                 File downloadedFile = downloadResult[0];
                 File unzipDir = downloadResult[1];
@@ -117,36 +124,36 @@ public class DownloadTransformer extends AbstractTransformer {
                 String absPath = downloadedFile.getCanonicalPath();
                 
                 AttributesImpl attrsImpl = new AttributesImpl();
-                if (!("".equals(unzipDir))) {
+                if (unzipDir != null) {
                     attrsImpl.addAttribute("", UNZIPPED_ATTRIBUTE, UNZIPPED_ATTRIBUTE, "CDATA", unzipDir.getAbsolutePath());
                 }
-                super.startElement(namespaceURI, RESULT_ELEMENT, qName, attrsImpl);
-                super.characters(absPath.toCharArray(), 0, absPath.length());
-                super.endElement(namespaceURI, RESULT_ELEMENT, qName);
+                xmlConsumer.startElement(uri, RESULT_ELEMENT, String.format("%s:%s", DOWNLOAD_PREFIX, RESULT_ELEMENT), attrsImpl);
+                xmlConsumer.characters(absPath.toCharArray(), 0, absPath.length());
+                xmlConsumer.endElement(uri, RESULT_ELEMENT, String.format("%s:%s", DOWNLOAD_PREFIX, RESULT_ELEMENT));
             } catch (Exception e) {
                 // throw new SAXException("Error downloading file", e);
-                super.startElement(namespaceURI, ERROR_ELEMENT, qName, attributes);
+                xmlConsumer.startElement(uri, ERROR_ELEMENT, qName, attributes);
                 String message = e.getMessage();
-                super.characters(message.toCharArray(), 0, message.length());
-                super.endElement(namespaceURI, ERROR_ELEMENT, qName);
+                xmlConsumer.characters(message.toCharArray(), 0, message.length());
+                xmlConsumer.endElement(uri, ERROR_ELEMENT, qName);
             }
         } else {
-            super.startElement(namespaceURI, localName, qName, attributes);
+            super.startTransformingElement(uri, localName, qName, attributes);
         }
     }
 
     @Override
-    public void endElement(String namespaceURI, String localName, String qName)
-            throws SAXException {
+    public void endTransformingElement(String uri, String localName, String qName)
+            throws SAXException, ProcessingException, IOException {
         if (DOWNLOAD_NS.equals(namespaceURI) && DOWNLOAD_ELEMENT.equals(localName)) {
             return;
         }
-        super.endElement(namespaceURI, localName, qName);
+        super.endTransformingElement(uri, localName, qName);
     }
 
-    private File[] download(String sourceUri, String targetDir, String target, String unzip)
+    private File[] download(String sourceUri, String targetDir, String target, String unzip, String recursiveUnzip)
             throws ProcessingException, IOException, SAXException {
-        File targetFile = null;
+        File targetFile;
         File unZipped = null;
 
         if (null != target && !target.equals("")) {
@@ -162,13 +169,14 @@ public class DownloadTransformer extends AbstractTransformer {
         if (!targetFile.getParentFile().exists()) {
             targetFile.getParentFile().mkdirs();
         }
-        boolean unzipFile = null != unzip && unzip.equals("true");
+        boolean unzipFile = (null != unzip && unzip.equals("true")) || 
+                (null != recursiveUnzip && recursiveUnzip.equals("true"));
         String absPath = targetFile.getAbsolutePath();
         String unzipDir = unzipFile ? FilenameUtils.removeExtension(absPath) : "";
         
         HttpClient httpClient = new HttpClient();
-        httpClient.setConnectionTimeout(5000);
-        httpClient.setTimeout(5000);
+        httpClient.setConnectionTimeout(60000);
+        httpClient.setTimeout(60000);
         
         if (System.getProperty("http.proxyHost") != null) {
             // getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
@@ -209,7 +217,7 @@ public class DownloadTransformer extends AbstractTransformer {
                 httpMethod.releaseConnection();
         }
         if (!"".equals(unzipDir)) {
-            unZipped = unZipIt(targetFile, unzipDir);
+            unZipped = unZipIt(targetFile, unzipDir, recursiveUnzip);
         }
         
         return new File[] {targetFile, unZipped};
@@ -221,7 +229,7 @@ public class DownloadTransformer extends AbstractTransformer {
      * @param zipFile input zip file
      * @param outputFolder zip file output folder
      */
-    private File unZipIt(File zipFile, String outputFolder){
+    private File unZipIt(File zipFile, String outputFolder, String recursiveUnzip){
 
     byte[] buffer = new byte[4096];
     
@@ -236,12 +244,13 @@ public class DownloadTransformer extends AbstractTransformer {
     	}
     		
          //get the zipped file list entry
-         try ( //get the zip file content
-                 ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
+         try (
+             //get the zip file content
+             ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
              //get the zipped file list entry
              ZipEntry ze = zis.getNextEntry();
              
-             while(ze!=null){
+             while(ze != null){
                  
                  String fileName = ze.getName();
                  File newFile = new File(outputFolder + File.separator + fileName);
@@ -259,9 +268,9 @@ public class DownloadTransformer extends AbstractTransformer {
                      }
                  }
                  
-//                 if (FilenameUtils.getExtension(fileName).equals("zip")) {
-//                     unZipIt(newFile, FilenameUtils.concat(outputFolder, FilenameUtils.getBaseName(fileName)));
-//                 }
+                 if ((null != recursiveUnzip && "true".equals(recursiveUnzip)) && FilenameUtils.getExtension(fileName).equals("zip")) {
+                     unZipIt(newFile, FilenameUtils.concat(outputFolder, FilenameUtils.getBaseName(fileName)), recursiveUnzip);
+                 }
                  ze = zis.getNextEntry();
              }
              

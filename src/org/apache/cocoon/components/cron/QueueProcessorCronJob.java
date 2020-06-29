@@ -1,7 +1,6 @@
 package org.apache.cocoon.components.cron;
 
 import com.thoughtworks.xstream.XStream;
-import com.thoughtworks.xstream.XStreamException;
 import com.thoughtworks.xstream.converters.Converter;
 import com.thoughtworks.xstream.converters.MarshallingContext;
 import com.thoughtworks.xstream.converters.UnmarshallingContext;
@@ -17,13 +16,20 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.lang.Boolean;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletionService;
@@ -37,6 +43,15 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.parsers.*;
+import javax.xml.transform.*;
+import javax.xml.xpath.*;
 import org.apache.avalon.framework.CascadingRuntimeException;
 import org.apache.avalon.framework.configuration.Configurable;
 import org.apache.avalon.framework.configuration.Configuration;
@@ -54,10 +69,15 @@ import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.excalibur.source.Source;
 import org.apache.excalibur.source.SourceResolver;
+import org.apache.excalibur.source.SourceParameters;
 import org.joda.time.DateTime;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /**
  *
@@ -116,10 +136,11 @@ import org.w3c.dom.Node;
  * <pre>
  * {@code
  * <job id="..." name="test-job" description="..."
- *   created="20140613T11:45:00" max-concurrent="3">
+ *   created="20140613T11:45:00" max-concurrent="3" task-timeout="timeout in seconds"?>
  *    <tasks>
  *        <task id="task-1">
  *           <uri>http://localhost:8888/koop/front/queue-test?id=1</uri>
+ *           <content>{your XML document goes here}</content>?
  *        </task>
  *        ...
  *    </tasks>
@@ -172,12 +193,12 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     private static final String PARAMETER_QUEUE_PATH = "queue-path";
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
     private static final long PROCESSOR_STATUS_FILE_STALE = 1200000;
-    private static final long TASK_TIMEOUT = 3000000; // 50 min.
 
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
     private static final String outDirName = "out";
     private static final String errorDirName = "error";
+    private static final String contentParameter = "document";
 
     private static final String STOP_JOB_FILENAME = "stop-job.xml";
 
@@ -295,7 +316,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
                 taskNode.setAttribute("startedAt", "" + new org.joda.time.DateTime());
                 
-                Element taskResult = processPipeline(task.uri, resolver, logger, doc);
+                Element taskResult = processPipeline(task, resolver, logger, doc);
                 
                 taskNode.setAttribute("finishedAt", "" + new org.joda.time.DateTime());
 
@@ -321,7 +342,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @param inDir Where all output files are stored.
      * @param currentJob The current job file.
      */
-    private void processCurrentJobConcurrently(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException {
+    private void processCurrentJobConcurrently(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException, NoSuchMethodException, XPathExpressionException, ParseException, ParserConfigurationException, SAXException {
         ExecutorService threadPool;
 
         if (this.getLogger().isInfoEnabled()) {
@@ -331,12 +352,14 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         if (this.getLogger().isDebugEnabled()) {
             this.getLogger().debug("Reading job file.");
         }
+        
         JobConfig jobConfig = readJobConfig(currentJob);
+        
         if (this.getLogger().isDebugEnabled()) {
             this.getLogger().debug("Job file read.");
         }
 
-        int totalTasks = jobConfig.tasks.length;
+        int totalTasks = jobConfig.tasks.size();
         int completedTasks = 0;
         DateTime jobStartedAt = new DateTime();
 
@@ -384,6 +407,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                     os, ++submittedTasks, maxThreads);
             jobExecutor.submit(taskRunner, taskRunner);
         }
+        jobConfig.tasks = null;
+
         if (this.getLogger().isDebugEnabled()) {
             this.getLogger().debug("Submitted " + submittedTasks + " tasks.");
         }
@@ -398,9 +423,13 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 if (this.getLogger().isDebugEnabled()) {
                     this.getLogger().debug("Retrieving next finished task.");
                 }
-                f = jobExecutor.poll(TASK_TIMEOUT, TimeUnit.MILLISECONDS);
+
+                f = jobConfig.taskTimeout > 0 ?
+                        jobExecutor.poll(jobConfig.taskTimeout, TimeUnit.SECONDS) :
+                        jobExecutor.take();
+
                 if (null == f) {
-                    this.getLogger().error("Failed getting next finished task (TASK_TIMEOUT (=" + TASK_TIMEOUT + ")), quitting.");
+                    this.getLogger().error("Failed getting next finished task (timeout=" + jobConfig.taskTimeout + "), quitting.");
                     // interrupted = true;
                 } else {
                     if (this.getLogger().isDebugEnabled()) {
@@ -437,12 +466,6 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                 break;
             }
         }
-//        if (interrupted) {
-//            if (this.getLogger().isInfoEnabled()) {
-//                this.getLogger().info("Calling threadPool.shutdownNow().");
-//            }
-//            threadPool.shutdownNow();
-//        }
         
         writeOutputStream(os, "</tasks>");
         os.close();
@@ -472,29 +495,55 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
 
     /**
-     * Process the URL in one Task. All errors are caught, if one task goes bad
+     * Process the URI in one Task. All errors are caught, if one task goes bad
      * continue processing the others.
      *
-     * @param url URL to fetch
+     * @param task Task containing uri to fetch
      * @param manager Cocoon servicemanager (so cocoon: protocol is allowed.)
      * @param logger For logging stuff
      * @param os Where the output ends up.
      * @return the output as a String object
      */
-    private Element processPipeline(String url,
+    private Element processPipeline(Task task,
             SourceResolver resolver,
             org.apache.avalon.framework.logger.Logger logger,
             Document doc)  {
         Source src = null;
         InputStream is = null;
         Element node = null;
+        Map parameters = null;
+
         try {
             if (logger.isDebugEnabled()) {
-                logger.debug("Going to resolve " + url);
+                logger.debug("Going to resolve " + task.uri);
             }
-            src = resolver.resolveURI(url);
+            
+            logger.info("Going to resolve " + task.uri);
+            logger.info("Document to post = " + task.content);
+            if (null != task.content) {
+                StringBuilder taskContentString = new StringBuilder();
+                StringWriter writer = new StringWriter();
+                StreamResult result = new StreamResult(writer);
+                TransformerFactory tf = TransformerFactory.newInstance();
+                Transformer transformer = tf.newTransformer();
+                for(int k=0 ; k < task.content.getLength() ; k++){
+                    DOMSource domSource = new DOMSource((Node) task.content.item(k));
+                    transformer.transform(domSource, result);
+                    taskContentString.append(writer.toString());
+                }
+
+
+                parameters = new HashMap();
+                parameters.put(Source.class.getName()+".uri.encoding", "UTF-8");                
+                parameters.put(Source.class.getName()+".uri.method", "POST");
+                SourceParameters sourceParameters = new SourceParameters();
+                sourceParameters.setParameter(contentParameter, taskContentString.toString());
+                parameters.put(Source.class.getName() + ".uri.parameters", sourceParameters);
+            }
+
+            src = resolver.resolveURI(task.uri, null, parameters);
             if (logger.isDebugEnabled()) {
-                logger.debug("Resolved " + url);
+                logger.debug("Resolved " + task.uri);
             }
             Document srcDoc = SourceUtil.toDOM(src);
             Node srcNode = srcDoc.getFirstChild();
@@ -650,17 +699,45 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     }
 
     /**
-     * Read job description file into JobConfig object using XStream.
+     * Read job description file into JobConfig object using DOM and XPath.
      *
      * @param currentJob
      * @return JobConfig
      */
-    private JobConfig readJobConfig(File currentJob) throws XStreamException {
+    private JobConfig readJobConfig(File currentJob) throws XPathExpressionException, ParseException, ParserConfigurationException, SAXException, IOException {
 
-        XStream xstream = getXStreamJobConfig();
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document doc = factory.newDocumentBuilder().parse(currentJob);
 
-        JobConfig jobConfig = (JobConfig) xstream.fromXML(currentJob);
+        XPathFactory xpf = XPathFactory.newInstance();
+        XPath xPath = xpf.newXPath();
 
+        JobConfig jobConfig = new JobConfig();
+
+        Element job = doc.getDocumentElement();
+        NamedNodeMap attributes = job.getAttributes();
+
+        jobConfig.id = job.getAttribute("id");
+        jobConfig.description = job.getAttribute("description");
+        DateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+        jobConfig.created = format.parse(job.getAttribute("created"));
+        jobConfig.maxConcurrent = Integer.parseInt(job.getAttribute("max-concurrent"));
+        jobConfig.taskTimeout = job.getAttribute("task-timeout").equals("") ? 0L : Long.parseLong(job.getAttribute("task-timeout"));
+        jobConfig.name = job.getAttribute("name");
+        jobConfig.tasks = new ArrayList<Task>();
+
+        XPathExpression expression = xPath.compile("/job/tasks/task");
+
+        NodeList tasks = (NodeList) xPath.evaluate("tasks/task", job, XPathConstants.NODESET);
+        for (int i = 0; i < tasks.getLength(); i++) {
+            Element taskXML = (Element) tasks.item(i);
+            Task task = new Task();
+            task.id = xPath.evaluate("@id", taskXML);
+            task.uri = xPath.evaluate("uri", taskXML);
+            task.content = (NodeList) xPath.evaluate("content/*", taskXML, XPathConstants.NODESET);
+            jobConfig.tasks.add(task);
+        }
         return jobConfig;
     }
 
@@ -787,7 +864,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     }
 
     /**
-     * Classes used by XStream for loading the job-*.xml config files into.
+     * Classes used for loading the job-*.xml config files into.
      */
     public static class Task {
 
@@ -795,10 +872,12 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
          <task id="task-*">
          <uri>URI of task to be executed, f.i. "cocoon://bron/svb/incremental" or
          "http://localhost:8888/import/bwbng"</uri>
+         <content>[your xml document goes here]</content>
          </task>
          */
         public String id;
         public String uri;
+        public NodeList content;
 
         public Task() {
         }
@@ -813,12 +892,14 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         public String description;
         public Date created;
         public Integer maxConcurrent;
-        public Task[] tasks;
+        public Long taskTimeout;
+        public ArrayList<Task> tasks;
 
         public JobConfig() {
         }
     }
-
+    
+    
     /**
      * Set some XStream options to configure serialization.
      * @return The configured XStream object.
@@ -871,4 +952,5 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             return new DateTime(reader.getValue());
         }
     }
+
 }
