@@ -16,35 +16,55 @@
  */
 package org.apache.cocoon.transformation;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.apache.avalon.framework.configuration.Configuration;
 import org.apache.avalon.framework.configuration.ConfigurationException;
 import org.apache.avalon.framework.parameters.Parameters;
 import org.apache.cocoon.ProcessingException;
 import org.apache.cocoon.environment.SourceResolver;
 import org.apache.cocoon.xml.AttributesImpl;
-import org.eclipse.jgit.api.*;
+import org.eclipse.jgit.api.CloneCommand;
+import org.eclipse.jgit.api.DiffCommand;
+import org.eclipse.jgit.api.FetchCommand;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.MergeResult;
+import org.eclipse.jgit.api.PullCommand;
+import org.eclipse.jgit.api.PullResult;
+import org.eclipse.jgit.api.PushCommand;
 import org.eclipse.jgit.api.ResetCommand.ResetType;
+import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.dircache.DirCache;
-import org.eclipse.jgit.lib.*;
+import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.ObjectReader;
+import org.eclipse.jgit.lib.PersonIdent;
+import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.RefUpdate.Result;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.merge.MergeStrategy;
 import org.eclipse.jgit.revwalk.DepthWalk.RevWalk;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
-import org.eclipse.jgit.transport.*;
+import org.eclipse.jgit.transport.FetchResult;
+import org.eclipse.jgit.transport.PushResult;
+import org.eclipse.jgit.transport.RefSpec;
+import org.eclipse.jgit.transport.RemoteRefUpdate;
+import org.eclipse.jgit.transport.TrackingRefUpdate;
+import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
-
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * This transformer can perform actions on a local git repository.
@@ -83,7 +103,7 @@ import java.util.logging.Logger;
  * }
  * </pre>
  * The @repository attribute specifies the path to the local repository that
- * is to be used. 
+ * is to be used.
  * When cloning the @url is mandatory.
  * When adding, @file defaults to "." (= all files).
  * With checkout, @file defaults to "master".
@@ -178,7 +198,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     private String author_email;
 
     public GitTransformer() {
-        this.defaultNamespaceURI = GIT_NAMESPACE_URI;
+        defaultNamespaceURI = GIT_NAMESPACE_URI;
     }
 
     /*
@@ -214,6 +234,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         }
     }
 
+    @Override
     public void startTransformingElement(String uri, String name, String raw, Attributes attr)
             throws ProcessingException, IOException, SAXException {
         if (uri.equals(GIT_NAMESPACE_URI)) {
@@ -244,9 +265,9 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                     doAdd(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, FILE_ATTR, "."));
                     break;
                 case COMMIT_ELEMENT:
-                    this.repository = getAttribute(attr, REPOSITORY_ATTR);
-                    this.author_name = getAttribute(attr, AUTHORNAME_ATTR);
-                    this.author_email = getAttribute(attr, AUTHOREMAIL_ATTR);
+                    repository = getAttribute(attr, REPOSITORY_ATTR);
+                    author_name = getAttribute(attr, AUTHORNAME_ATTR);
+                    author_email = getAttribute(attr, AUTHOREMAIL_ATTR);
                     break;
                 case COMMIT_MESSAGE_ELEMENT:
                     startTextRecording();
@@ -259,7 +280,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                     doPull(getAttribute(attr, REPOSITORY_ATTR), getAttribute(attr, ACCOUNT_ATTR), getAttribute(attr, PASSWORD_ATTR), getAttribute(attr, BRANCH_ATTR, MASTER_BRANCH));
                     break;
                 default:
-                    throw new SAXException(java.lang.String.format("Unknown GitTransformer element @%s.", name);
+                    throw new SAXException(java.lang.String.format("Unknown GitTransformer element @%s.", name));
             }
         }
         else {
@@ -267,23 +288,24 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         }
     }
 
+    @Override
     public void endTransformingElement(String uri, String name, String raw)
             throws ProcessingException, IOException, SAXException {
         if (uri.equals(GIT_NAMESPACE_URI)) {
 
             switch (name) {
                 case COMMIT_ELEMENT:
-                    if (null == this.commit_message) {
+                    if (null == commit_message) {
                         throw new SAXException("Missing <git:"+COMMIT_MESSAGE_ELEMENT+"/>.");
                     }
-                    try (Git git = Git.open(new File(this.repository))) {
+                    try (Git git = Git.open(new File(repository))) {
                         // Commit everything
-                        PersonIdent personIdent = new PersonIdent(this.author_name, this.author_email);
+                        PersonIdent personIdent = new PersonIdent(author_name, author_email);
                         try {
-                            RevCommit revCommit = git.commit().setAllowEmpty(false).setAll(true).setMessage(this.commit_message).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
+                            RevCommit revCommit = git.commit().setAllowEmpty(false).setAll(true).setMessage(commit_message).setAuthor(personIdent).setCommitter("GitTransformer", "no-email").call();
                             if (null == revCommit) {
                                 startElement(COMMITRESULT_ELEMENT);
-                                chars("revCommit is NULL (commit.message="+this.commit_message+", author_name="+this.author_name+", author_email="+this.author_email+", repository="+this.repository+")");
+                                chars("revCommit is NULL (commit.message="+commit_message+", author_name="+author_name+", author_email="+author_email+", repository="+repository+")");
                                 endElement(COMMITRESULT_ELEMENT);
                             }
                             else {
@@ -304,7 +326,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
                     }
                     break;
                 case COMMIT_MESSAGE_ELEMENT:
-                    this.commit_message = endTextRecording();
+                    commit_message = endTextRecording();
                     break;
             }
         } else {
@@ -615,10 +637,10 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     }
 
     private void reset() {
-        this.repository = null;
-        this.author_name = null;
-        this.author_email = null;
-        this.commit_message = null;
+        repository = null;
+        author_name = null;
+        author_email = null;
+        commit_message = null;
     }
 
     /*
