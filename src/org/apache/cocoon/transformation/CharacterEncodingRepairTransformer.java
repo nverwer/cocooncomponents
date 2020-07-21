@@ -12,13 +12,13 @@ import org.xml.sax.SAXException;
 /**
  * If your text content comes from a source that uses the wrong character encoding,
  * you will see things like "CosmÃ©tique" instead of "Cosmétique".
- * In that case, the source says it uses ISO-8859-1 or Windows-1252 encoding,
- * but the text is UTF-8 encoded.
- * This transformer tries to fix this situation by decoding and re-encoding text content.
+ * In that case, the source says it uses ISO-8859-1 or Windows-1252 encoding, but the text is UTF-8 encoded.
+ * What about co�rdinatie? (Displayed as UTF-8, but actual encoding is different.)
+ * This transformer tries to fix this and other situation by decoding and re-encoding text content.
  * It has two parameters:
  * <dl>
- *   <dt>sourceEncoding</dt> <dd>What the source thinks its encoding is (default is "ISO-8859-1")</dd>
- *   <dt>targetEncoding</dt> <dd>What the actual encoding is (default is "UTF-8")</dd>
+ *   <dt>sourceEncoding</dt> <dd>The source's actual encoding (default is "ISO-8859-1")</dd>
+ *   <dt>targetEncoding</dt> <dd>The declared or expected encoding (default is "UTF-8")</dd>
  * </dl>
  *
  * @author Rakensi
@@ -39,7 +39,9 @@ public class CharacterEncodingRepairTransformer extends AbstractTransformer {
   public void characters(char[] chars, int start, int len) throws SAXException {
     try {
       String inputString = new String(chars, start, len);
+      // Encode the string into bytes using the source encoding.
       byte[] inputBytes = inputString.getBytes(sourceEncoding);
+      // Decode the bytes into a string using the target encoding.
       String outputString = new String(inputBytes, targetEncoding);
       super.characters(outputString.toCharArray(), 0, outputString.length());
     } catch (UnsupportedEncodingException e) {

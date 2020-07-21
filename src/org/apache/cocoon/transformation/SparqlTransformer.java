@@ -71,6 +71,12 @@ import org.xml.sax.SAXException;
  * The optional <code>content</code> attribute indicates if the content of the <code>query</code> element is "text"
  * (default for SPARQL queries), or "xml" (useful if you PUT RDF triples).
  * Unfortunately, if you use content="xml" you may run into namespace problems.
+ * Note that there is also a <code>http:Content-Type</code> attribute, which specified the content-type used by the HTTP request.
+ *
+ * The optional <code>charset</code> attribute indicates the character set used to encode the content
+ * of the <code>query</code> element. The default is "UTF-8".
+ * If the <code>http:Content-Type</code> attribute does not contain a charset, the value of the <code>charset</code> attribute
+ * will be added to the <code>http:Content-Type</code>.
  *
  * The optional <code>parse</code> attribute indicates how the response should be parsed.
  * It can be "xml" or "text". Default is "xml". Text will be wrapped in an XML element.
@@ -127,6 +133,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public static final String METHOD_ATTR = "method";
   public static final String CREDENTIALS_ATTR = "credentials";
   public static final String CONTENT_ATTR = "content";
+  public static final String CHARSET_ATTR = "charset";
   public static final String PARSE_ATTR = "parse";
   public static final String SHOW_ERRORS_ATTR = "showErrors";
   public static final String SHOW_RESPONSE_HEADERS_ATTR = "showResponseHeaders";
@@ -135,11 +142,13 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public static final String DEFAULT_QUERY_PARAM = "query";
   public static final String HTTP_CONTENT_TYPE = "Content-Type";
 
+  private boolean logVerboseInfo;
   private boolean inQuery;
   private String src;
   private String method;
   private String credentials;
   private String contentType;
+  private String charset;
   private String parameterName;
   private String parse;
   private boolean showErrors;
@@ -155,11 +164,16 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
   public void setup(SourceResolver resolver, @SuppressWarnings("rawtypes") Map objectModel, String src,
       Parameters params) throws ProcessingException, SAXException, IOException {
     super.setup(resolver, objectModel, src, params);
+    logVerboseInfo = params.getParameterAsBoolean("verbose", false);
     inQuery = false;
   }
 
   private String getAttribute(Attributes attr, String name, String defaultValue) {
-    return (attr.getIndex(name) >= 0) ? attr.getValue(name) : defaultValue;
+    String attributeValue = (attr.getIndex(name) >= 0) ? attr.getValue(name) : defaultValue;
+    if (logVerboseInfo) {
+      getLogger().info(toString()+" @"+name+" = \""+attributeValue+"\"");
+    }
+    return attributeValue;
   }
 
   @Override
@@ -177,6 +191,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       method = getAttribute(attr, METHOD_ATTR, "GET");
       credentials = getAttribute(attr, CREDENTIALS_ATTR, "");
       contentType = getAttribute(attr, CONTENT_ATTR, "text");
+      charset = getAttribute(attr, CHARSET_ATTR, "UTF-8");
       parameterName = getAttribute(attr, PARAMETER_NAME_ATTR, DEFAULT_QUERY_PARAM);
       parse = getAttribute(attr, PARSE_ATTR, "xml");
       showErrors = getAttribute(attr, SHOW_ERRORS_ATTR, "true").charAt(0) == 't';
@@ -222,7 +237,9 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       throws ProcessingException, IOException, SAXException {
     HttpClient httpclient = new HttpClient();
     if (System.getProperty("http.proxyHost") != null) {
-      // getLogger().warn("PROXY: "+System.getProperty("http.proxyHost"));
+      if (logVerboseInfo) {
+        getLogger().info("PROXY: "+System.getProperty("http.proxyHost"));
+      }
       String nonProxyHostsRE = System.getProperty("http.nonProxyHosts", "");
       if (nonProxyHostsRE.length() > 0) {
         String[] pHosts = nonProxyHostsRE.replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*").split("\\|");
@@ -248,6 +265,15 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     if (requestParameters.getParameter(parameterName).trim().equals("")) {
       requestParameters.removeParameter(parameterName);
     }
+    // Get (and adjust) the content-type header.
+    String contentType = null;
+    if (httpHeaders.containsKey(HTTP_CONTENT_TYPE)) {
+      contentType = httpHeaders.get(HTTP_CONTENT_TYPE);
+      if (!contentType. matches(".*;\\s*charset=.*")) {
+        contentType += "; charset=" + charset;
+        httpHeaders.put(HTTP_CONTENT_TYPE, contentType);
+      }
+    }
     // Instantiate different HTTP methods.
     if ("GET".equalsIgnoreCase(method)) {
       httpMethod = new GetMethod(url);
@@ -256,10 +282,12 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       } else {
         httpMethod.setQueryString("");
       }
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" GET "+url+" ?"+httpMethod.getQueryString());
+      }
     } else if ("POST".equalsIgnoreCase(method)) {
       PostMethod httpPostMethod = new PostMethod(url);
-      if (httpHeaders.containsKey(HTTP_CONTENT_TYPE) &&
-          httpHeaders.get(HTTP_CONTENT_TYPE).startsWith("application/x-www-form-urlencoded")) {
+      if ( contentType != null && contentType.startsWith(PostMethod.FORM_URL_ENCODED_CONTENT_TYPE)) {
         // Encode parameters in POST body.
         @SuppressWarnings("unchecked")
         Iterator<String> parNames = requestParameters.getParameterNames();
@@ -267,9 +295,12 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
           String parName = parNames.next();
           httpPostMethod.addParameter(parName, requestParameters.getParameter(parName));
         }
+        if (logVerboseInfo) {
+          getLogger().info(toString()+" POST application/x-www-form-urlencoded ("+httpPostMethod.getParameters().length+" parameters)");
+        }
       } else {
         // Use query parameter as POST body
-        RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName));
+        RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName), contentType, charset);
         httpPostMethod.setRequestEntity(reqentity);
         // Add other parameters to query string
         requestParameters.removeParameter(parameterName);
@@ -278,17 +309,27 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         } else {
           httpPostMethod.setQueryString("");
         }
+        if (logVerboseInfo) {
+          getLogger().info(toString()+" POST "+url+" with ["+parameterName+"] as body with length "+reqentity.getContentLength());
+        }
       }
       httpMethod = httpPostMethod;
     } else if ("PUT".equalsIgnoreCase(method)) {
       PutMethod httpPutMethod = new PutMethod(url);
-      httpPutMethod.setRequestEntity(new StringRequestEntity(requestParameters.getParameter(parameterName)));
+      RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName));
+      httpPutMethod.setRequestEntity(reqentity);
       requestParameters.removeParameter(parameterName);
       httpPutMethod.setQueryString(requestParameters.getEncodedQueryString());
       httpMethod = httpPutMethod;
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" PUT "+url+" with ["+parameterName+"] as body with length "+reqentity.getContentLength());
+      }
     } else if ("DELETE".equalsIgnoreCase(method)) {
       httpMethod = new DeleteMethod(url);
       httpMethod.setQueryString(requestParameters.getEncodedQueryString());
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" DELETE "+url);
+      }
     } else {
       throw new ProcessingException("Unsupported method: "+method);
     }
@@ -309,42 +350,37 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
     XMLizer xmlizer = null;
     try {
       // Execute the request.
-      String responseBody = "";
-      String statusText = "";
-      int responseCode;
-      responseCode = httpclient.executeMethod(httpMethod);
-      // Handle errors, if any.
+      int responseCode = httpclient.executeMethod(httpMethod);
+      // Receive the response.
+      String statusText = httpMethod.getStatusText();
+      if (logVerboseInfo) {
+        getLogger().info(toString()+" response: "+responseCode+" "+httpMethod.getStatusText());
+      }
+      if (showResponseHeaders) {
+        emitResponseHeaders(httpMethod);
+      }
       if (responseCode < 200 || responseCode >= 300) {
+        // Handle errors.
+        String responseBody = "";
+        try {
+          responseBody = httpMethod.getResponseBodyAsString();
+        } catch (Exception e) {}
         if (showErrors) {
           AttributesImpl attrs = new AttributesImpl();
-          attrs.addCDATAAttribute("status", ""+responseCode);
+          attrs.addCDATAAttribute("status", ""+responseCode+" "+statusText);
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
-          responseBody = httpMethod.getResponseBodyAsString();
-          statusText = httpMethod.getStatusText();
-          xmlConsumer.characters(responseBody.toCharArray(), 0, statusText.length());
+          xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
         } else {
           throw new ProcessingException("Received HTTP status code "+responseCode+" "+statusText+":\n"+responseBody);
         }
-      }
-      if (showResponseHeaders) {
-        xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "response-headers", "sparql:response-headers", EMPTY_ATTRIBUTES);
-        for (Header responseHeader : httpMethod.getResponseHeaders()) {
-          AttributesImpl attributes = new AttributesImpl();
-          attributes.addCDATAAttribute(responseHeader.getName(), responseHeader.getValue());
-          xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "header", "sparql:header", attributes);
-          xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "header", "header");
-        }
-        xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "response-headers", "sparql:response-headers");
-      }
-      // Parse the response
-      else {
+      } else {
+        // Parse the response.
         if (responseCode == 204) { // No content.
-          String statusLine = httpMethod.getStatusLine().toString();
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
+          String statusLine = httpMethod.getStatusLine().toString();
           xmlConsumer.characters(statusLine.toCharArray(), 0, statusLine.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
-          httpMethod.getResponseBodyAsString();
         } else if (parse.equalsIgnoreCase("xml")) {
           InputStream responseBodyStream = httpMethod.getResponseBodyAsStream();
           xmlizer = (XMLizer) manager.lookup(XMLizer.ROLE);
@@ -352,7 +388,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
           responseBodyStream.close();
         } else if (parse.equalsIgnoreCase("text")) {
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "result", "sparql:result", EMPTY_ATTRIBUTES);
-          responseBody = httpMethod.getResponseBodyAsString();
+          String responseBody = httpMethod.getResponseBodyAsString();
           xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "result", "sparql:result");
         } else {
@@ -367,6 +403,21 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         }
         httpMethod.releaseConnection();
     }
+  }
+
+  /**
+   * @param httpMethod
+   * @throws SAXException
+   */
+  private void emitResponseHeaders(HttpMethod httpMethod) throws SAXException {
+    xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "response-headers", "sparql:response-headers", EMPTY_ATTRIBUTES);
+    for (Header responseHeader : httpMethod.getResponseHeaders()) {
+      AttributesImpl attributes = new AttributesImpl();
+      attributes.addCDATAAttribute(responseHeader.getName(), responseHeader.getValue());
+      xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "header", "sparql:header", attributes);
+      xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "header", "header");
+    }
+    xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "response-headers", "sparql:response-headers");
   }
 
 }
