@@ -272,20 +272,6 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         return getAttribute(attr, name, null);
     }
 
-    private void reportSettings() {
-        System.out.println("commitMessage="+this.commitMessage);
-        System.out.println("repository="+this.repository);
-        System.out.println("remote="+this.remote);
-        System.out.println("account="+this.account);
-        System.out.println("password="+this.password);
-        System.out.println("branch="+this.branch);
-        System.out.println("file="+this.file);
-        System.out.println("oldTree="+this.oldTree);
-        System.out.println("newTree="+this.newTree);
-        System.out.println("authorName="+this.authorName);
-        System.out.println("authorEmail="+this.authorEmail);
-    }
-
     private String getAttribute(Attributes attr, String name, String defaultValue) throws SAXException {
         if (attr.getIndex(name) >= 0) {
             return attr.getValue(name);
@@ -300,7 +286,6 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
     public void startTransformingElement(String uri, String name, String raw, Attributes attr)
             throws ProcessingException, IOException, SAXException {
         if (uri.equals(GIT_NAMESPACE_URI)) {
-//            reportSettings();
             switch (name) {
                 case CLONE_ELEMENT:
                     doClone();
@@ -740,7 +725,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         public EnhancedAttributesImpl() {
             //return this;
         }
-
+        
         public EnhancedAttributesImpl addAttribute(String key, String value) {
             this.addCDATAAttribute(key, value);
             return this;
