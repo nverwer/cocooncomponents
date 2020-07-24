@@ -261,6 +261,9 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         this.file = params.getParameter(FILE_ATTR, ".");
         this.oldTree = params.getParameter(OLDTREE_ATTR, "HEAD^{tree}");
         this.newTree = params.getParameter(NEWTREE_ATTR, "FETCH_HEAD^{tree}");
+        if ("".equals(file)) { // Cannot be the empty string.
+            file = ".";
+        }
     }
 
     @Override
@@ -725,7 +728,7 @@ public class GitTransformer extends AbstractSAXPipelineTransformer {
         public EnhancedAttributesImpl() {
             //return this;
         }
-        
+
         public EnhancedAttributesImpl addAttribute(String key, String value) {
             this.addCDATAAttribute(key, value);
             return this;
