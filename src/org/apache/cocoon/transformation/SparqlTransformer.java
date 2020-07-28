@@ -300,7 +300,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         }
       } else {
         // Use query parameter as POST body
-        RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName), contentType, charset);
+        RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName, ""), contentType, charset);
         httpPostMethod.setRequestEntity(reqentity);
         // Add other parameters to query string
         requestParameters.removeParameter(parameterName);
@@ -316,7 +316,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
       httpMethod = httpPostMethod;
     } else if ("PUT".equalsIgnoreCase(method)) {
       PutMethod httpPutMethod = new PutMethod(url);
-      RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName));
+      RequestEntity reqentity = new StringRequestEntity(requestParameters.getParameter(parameterName, ""));
       httpPutMethod.setRequestEntity(reqentity);
       requestParameters.removeParameter(parameterName);
       httpPutMethod.setQueryString(requestParameters.getEncodedQueryString());
