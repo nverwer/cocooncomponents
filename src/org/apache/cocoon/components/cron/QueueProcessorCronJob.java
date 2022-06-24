@@ -380,9 +380,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         } else {
             // Use specified maximum, but only if it is no more than what's
             // available.
-            if (maxConcurrent > availableProcessors) {
-                maxThreads = availableProcessors;
-            }
+//            if (maxConcurrent > availableProcessors) {
+//                maxThreads = availableProcessors;
+//            }
         }
         if (1 == maxThreads) {
             threadPool = Executors.newSingleThreadExecutor();
