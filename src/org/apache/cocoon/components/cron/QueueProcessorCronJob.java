@@ -345,6 +345,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     private void processCurrentJobConcurrently(File inDir, File currentJob) throws ServiceException, FileNotFoundException, IOException, NoSuchMethodException, XPathExpressionException, ParseException, ParserConfigurationException, SAXException {
         ExecutorService threadPool;
 
+        this.getLogger().debug(String.format("processCurrentJobConcurrently file \"%s\"", currentJob.getAbsolutePath()));
+
         if (this.getLogger().isInfoEnabled()) {
             this.getLogger().info("Processing job " + currentJob.getAbsoluteFile());
         }
@@ -369,7 +371,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         // For computer intensive tasks, use Runtime.getRuntime().availableProcessors() + 1.
         int availableProcessors = Runtime.getRuntime().availableProcessors() * 2;
         int maxConcurrent = jobConfig.maxConcurrent;
-        int maxThreads = 1; // default nr of threads
+
+        this.getLogger().info(String.format("availableProcessors=%s,  maxConcurrent=%s", availableProcessors, maxConcurrent));
+        int maxThreads = maxConcurrent; // default nr of threads
         if (maxConcurrent <= 0) {
             // If negative, add to availableProcessors, but of course,
             // use at least one thread.
@@ -393,6 +397,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             this.getLogger().info("Using " + maxThreads + " threads to execute " + totalTasks + " tasks.");
         }
 
+        this.getLogger().info(String.format("Using %s threads to execute %s tasks.", maxThreads, totalTasks));
+
         CompletionService<CocoonTaskRunner> jobExecutor = new ExecutorCompletionService<CocoonTaskRunner>(threadPool);
         SourceResolver resolver = (SourceResolver) this.manager.lookup(SourceResolver.ROLE);
 
@@ -412,6 +418,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         if (this.getLogger().isDebugEnabled()) {
             this.getLogger().debug("Submitted " + submittedTasks + " tasks.");
         }
+        this.getLogger().info(String.format("Submitted %s tasks.", submittedTasks));
         boolean interrupted = false;
 
         threadPool.shutdown(); // Means: process all tasks.
@@ -451,6 +458,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             if (this.getLogger().isInfoEnabled()) {
                 this.getLogger().info("Tasks completed: " + completedTasks + "/" + totalTasks);
             }
+            this.getLogger().info(String.format("Tasks completed: %s", completedTasks + "/" + totalTasks));
             writeProcessorStatus(jobConfig.name, task, jobStartedAt, totalTasks, completedTasks);
             if (!interrupted) {
                 interrupted = externallyInterrupted();
@@ -706,6 +714,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      */
     private JobConfig readJobConfig(File currentJob) throws XPathExpressionException, ParseException, ParserConfigurationException, SAXException, IOException {
 
+        this.getLogger().debug(String.format("readJobConfig file \"%s\"", currentJob.getAbsolutePath()));
+
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document doc = factory.newDocumentBuilder().parse(currentJob);
@@ -819,6 +829,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * @throws IOException
      */
     private void moveFileTo(File fromFile, File toFile) throws IOException {
+        this.getLogger().debug(String.format("Moving file \"%s\" to \"%s\"", fromFile.getAbsolutePath(), toFile.getAbsoluteFile()));
         if (toFile.isFile()) {
             FileUtils.forceDelete(toFile);
         }
@@ -853,12 +864,12 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     
     
     private void writeOutputStream(OutputStream os, String msg) {            
-//            synchronized (os) {
-            try {
-                os.write(msg.getBytes());
-            } catch (IOException ex) {
-                Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
-//              }
+            synchronized (os) {
+                try {
+                    os.write(msg.getBytes());
+                } catch (IOException ex) {
+                    Logger.getLogger(QueueProcessorCronJob.class.getName()).log(Level.SEVERE, null, ex);
+              }
             }
 
     }

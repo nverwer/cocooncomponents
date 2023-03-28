@@ -49,8 +49,8 @@ import org.xml.sax.SAXException;
  * </pre>
  The @src specifies the file that should be created.
  The @target attribute specifies the directory where the content of the zip
-  will be stored. If unspecified, the content will unzipped in a folder
- with the target of the zip file, minus the '.zip' extension.
+ will be stored. If unspecified, the content will unzip to a folder
+ with the name of the zip file, minus the '.zip' extension.
  If the @recursive attribute is "true" then zip files in the @src zip
  will also be unzipped.
  <p>
@@ -120,7 +120,6 @@ public class UnzipTransformer extends AbstractSAXTransformer {
 
             String targetFolderDefault = FilenameUtils.getFullPathNoEndSeparator(src);
 
-//            System.out.println("src=" + src + ", targetFolderDefault=" + targetFolderDefault);
             this.getLogger().debug("src=" + src + ", targetFolderDefault=" + targetFolderDefault);
 
             File unzipResult;
@@ -198,7 +197,7 @@ public class UnzipTransformer extends AbstractSAXTransformer {
         ZipEntry entry;
         String name, dir;
 
-        //create output directory is not exists
+        //create output directory if it does not exist
         if (!outdir.exists()) {
             outdir.mkdir();
         }
@@ -223,7 +222,9 @@ public class UnzipTransformer extends AbstractSAXTransformer {
             File newFile = extractFile(zin, outdir, name);
 
             if (recursiveUnzip && FilenameUtils.getExtension(name).equals("zip")) {
-                unzip(newFile, new File(FilenameUtils.concat(FilenameUtils.concat(outdir.getCanonicalPath(), FilenameUtils.getPath(name)), FilenameUtils.getBaseName(name))), recursiveUnzip);
+                /* Plak naam van de zip ervoor */
+                String newZippie = FilenameUtils.concat(FilenameUtils.concat(outdir.getCanonicalPath(), FilenameUtils.getPath(name)), FilenameUtils.getBaseName(name));
+                unzip(newFile, new File(newZippie), recursiveUnzip);
                 newFile.delete();
             }
         }
