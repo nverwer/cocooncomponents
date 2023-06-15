@@ -8,6 +8,7 @@ import com.thoughtworks.xstream.converters.extended.ISO8601DateConverter;
 import com.thoughtworks.xstream.io.HierarchicalStreamReader;
 import com.thoughtworks.xstream.io.HierarchicalStreamWriter;
 import com.thoughtworks.xstream.io.xml.DomDriver;
+import com.thoughtworks.xstream.security.AnyTypePermission;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
@@ -458,7 +459,6 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             if (this.getLogger().isInfoEnabled()) {
                 this.getLogger().info("Tasks completed: " + completedTasks + "/" + totalTasks);
             }
-            this.getLogger().info(String.format("Tasks completed: %s", completedTasks + "/" + totalTasks));
             writeProcessorStatus(jobConfig.name, task, jobStartedAt, totalTasks, completedTasks);
             if (!interrupted) {
                 interrupted = externallyInterrupted();
@@ -527,8 +527,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
             }
             
             logger.info("Going to resolve " + task.uri);
-            logger.info("Document to post = " + task.content);
             if (null != task.content) {
+                logger.info("Document to post = " + task.content);
                 StringBuilder taskContentString = new StringBuilder();
                 StringWriter writer = new StringWriter();
                 StreamResult result = new StreamResult(writer);
@@ -542,8 +542,9 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
 
                 parameters = new HashMap();
-                parameters.put(Source.class.getName()+".uri.encoding", "UTF-8");                
+                parameters.put(Source.class.getName()+".uri.encoding", "UTF-8");
                 parameters.put(Source.class.getName()+".uri.method", "POST");
+//                parameters.put(Source.class.getName()+".uri.mimetype", "text/xml");
                 SourceParameters sourceParameters = new SourceParameters();
                 sourceParameters.setParameter(contentParameter, taskContentString.toString());
                 parameters.put(Source.class.getName() + ".uri.parameters", sourceParameters);
@@ -926,8 +927,10 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         // </job>
         XStream xstream = new XStream(new DomDriver());
 
-//        ISO8601DateConverter
+        //        ISO8601DateConverter
         xstream.registerConverter(new ISO8601DateConverter());
+        // Allow anything in content
+        xstream.addPermission(AnyTypePermission.ANY);
 
         xstream.alias("job", JobConfig.class);
         xstream.useAttributeFor(JobConfig.class, "id");
