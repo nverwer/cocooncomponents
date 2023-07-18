@@ -195,6 +195,8 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
     private static final String PROCESSOR_STATUS_FILE = "processor-status.xml";
     private static final long PROCESSOR_STATUS_FILE_STALE = 1200000;
 
+    private static final String QUEUE_PAUSED_FILE = "queue-paused.txt";
+
     private static final String inDirName = "in";
     private static final String processingDirName = "in-progress";
     private static final String outDirName = "out";
@@ -209,9 +211,14 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
      * An enum denoting the status of a Processor this class).
      */
     public enum ProcessorStatus {
-
         ALIVE, DEAD, NONE
+    }
 
+    /**
+     * The status of this Queue: ACTIVE (process jobs) or PAUSE (do not process jobs).
+     */
+    public enum QueueStatus {
+        ACTIVE, PAUSED
     }
 
     /**
@@ -539,6 +546,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
                     transformer.transform(domSource, result);
                     taskContentString.append(writer.toString());
                 }
+                // logger.info("[" + taskContentString + "]");
 
 
                 parameters = new HashMap();
@@ -593,80 +601,86 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         File outDir = getOrCreateDirectory(queueDir, outDirName);
         File errorDir = getOrCreateDirectory(queueDir, errorDirName);
 
-        // Get status of Processor
-        QueueProcessorCronJob.ProcessorStatus pStatus = processorStatus();
 
-        File currentJobFile = getOldestJobFile(processingDir);
+        // Get status of Queue
+        QueueProcessorCronJob.QueueStatus qStatus = queueStatus();
 
-        if (this.getLogger().isDebugEnabled()) {
-            this.getLogger().debug(String.format("Processor: %s, queueDir=%s, current job: %s", pStatus, queueDir, currentJobFile));
-        }
-        // A job is already being processed
-        if (null != currentJobFile) {
+        if (qStatus == QueueStatus.ACTIVE) {
+            // Get status of Processor
+            QueueProcessorCronJob.ProcessorStatus pStatus = processorStatus();
 
-            /*
-             * A job is processed by a live Processor -> quit now.
-             */
-            if (pStatus.equals(QueueProcessorCronJob.ProcessorStatus.ALIVE)) {
+            File currentJobFile = getOldestJobFile(processingDir);
 
-                if (this.getLogger().isDebugEnabled()) {
-                    this.getLogger().debug(String.format("Active job \"%s\" in queue \"%s\", stopping", currentJobFile, queueDir));
-                }
-            } else {
-                /*
-                 * A job was processed, but the Processor is dead. 
-                 * Move job tot error-folder. Clean processing folder.
-                 */
-                this.getLogger().warn(String.format("Stale job \"%s\" in queue \"%s\", cancelling job and stopping", currentJobFile, queueDir));
-                moveFileTo(currentJobFile, new File(errorDir, currentJobFile.getName()));
-                FileUtils.cleanDirectory(processingDir);
+            if (this.getLogger().isDebugEnabled()) {
+                this.getLogger().debug(String.format("Processor: %s, queueDir=%s, current job: %s", pStatus, queueDir, currentJobFile));
             }
-        } else {
-            // No job being processed.
+            // A job is already being processed
+            if (null != currentJobFile) {
 
-            File jobFile = getOldestJobFile(inDir);
-
-            if (jobFile != null) {
-
-                // First delete any old stop-file if present.
-                this.getLogger().info("Deleting stop-file " + stopFile());
-                Files.deleteIfExists(stopFile());
-
-                String jobFileName = jobFile.getName();
-                File currentJob = new File(processingDir, jobFileName);
-
-                try {
-
-                    FileUtils.cleanDirectory(processingDir);
-
-                    writeProcessorStatus(jobFileName, null, new DateTime(), 0, 0);
+                /*
+                 * A job is processed by a live Processor -> quit now.
+                 */
+                if (pStatus.equals(QueueProcessorCronJob.ProcessorStatus.ALIVE)) {
 
                     if (this.getLogger().isDebugEnabled()) {
-                        this.getLogger().debug(String.format("Processing job \"%s\" in queue \"%s\"", jobFileName, queueDir));
+                        this.getLogger().debug(String.format("Active job \"%s\" in queue \"%s\", stopping", currentJobFile, queueDir));
                     }
-
-                    moveFileTo(jobFile, currentJob);
-
-                    if (this.getLogger().isDebugEnabled()) {
-                        this.getLogger().debug(String.format("Moved job \"%s\" to \"%s\"", jobFile, currentJob));
-                    }
-
-                    processCurrentJobConcurrently(processingDir, currentJob);
-
-                    finishUpJob(processingDir, outDir, currentJob);
-
-                } catch (Exception e) { // Catch IOException AND catch ClassCast exception etc.
-                    this.getLogger().error("Error processing job \"" + jobFileName + "\"", e);
-                    moveFileTo(currentJob, new File(errorDir, jobFileName));
-                    String stackTrace = ExceptionUtils.getFullStackTrace(e);
-                    FileUtils.writeStringToFile(new File(errorDir, FilenameUtils.removeExtension(jobFileName) + ".txt"), stackTrace, "UTF-8");
-                } finally {
+                } else {
+                    /*
+                     * A job was processed, but the Processor is dead.
+                     * Move job tot error-folder. Clean processing folder.
+                     */
+                    this.getLogger().warn(String.format("Stale job \"%s\" in queue \"%s\", cancelling job and stopping", currentJobFile, queueDir));
+                    moveFileTo(currentJobFile, new File(errorDir, currentJobFile.getName()));
                     FileUtils.cleanDirectory(processingDir);
-                    deleteProcessorStatus();
                 }
             } else {
-                if (this.getLogger().isDebugEnabled()) {
-                    this.getLogger().debug("No job, stopping");
+                // No job being processed.
+
+                File jobFile = getOldestJobFile(inDir);
+
+                if (jobFile != null) {
+
+                    // First delete any old stop-file if present.
+                    this.getLogger().info("Deleting stop-file " + stopFile());
+                    Files.deleteIfExists(stopFile());
+
+                    String jobFileName = jobFile.getName();
+                    File currentJob = new File(processingDir, jobFileName);
+
+                    try {
+
+                        FileUtils.cleanDirectory(processingDir);
+
+                        writeProcessorStatus(jobFileName, null, new DateTime(), 0, 0);
+
+                        if (this.getLogger().isDebugEnabled()) {
+                            this.getLogger().debug(String.format("Processing job \"%s\" in queue \"%s\"", jobFileName, queueDir));
+                        }
+
+                        moveFileTo(jobFile, currentJob);
+
+                        if (this.getLogger().isDebugEnabled()) {
+                            this.getLogger().debug(String.format("Moved job \"%s\" to \"%s\"", jobFile, currentJob));
+                        }
+
+                        processCurrentJobConcurrently(processingDir, currentJob);
+
+                        finishUpJob(processingDir, outDir, currentJob);
+
+                    } catch (Exception e) { // Catch IOException AND catch ClassCast exception etc.
+                        this.getLogger().error("Error processing job \"" + jobFileName + "\"", e);
+                        moveFileTo(currentJob, new File(errorDir, jobFileName));
+                        String stackTrace = ExceptionUtils.getFullStackTrace(e);
+                        FileUtils.writeStringToFile(new File(errorDir, FilenameUtils.removeExtension(jobFileName) + ".txt"), stackTrace, "UTF-8");
+                    } finally {
+                        FileUtils.cleanDirectory(processingDir);
+                        deleteProcessorStatus();
+                    }
+                } else {
+                    if (this.getLogger().isDebugEnabled()) {
+                        this.getLogger().debug("No job, stopping");
+                    }
                 }
             }
         }
@@ -751,6 +765,23 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
         }
         return jobConfig;
     }
+
+
+    /**
+     * Return ACTIVE (No QUEUE_PAUSED_FILE) or PAUSED (Queue is paused)
+     *
+     * @return QueueStatus: ACTIVE, PAUSED
+     */
+    private synchronized QueueStatus queueStatus() {
+        File statusFile = new File(this.queuePath, QUEUE_PAUSED_FILE);
+        if (!statusFile.exists()) {
+            return QueueProcessorCronJob.QueueStatus.ACTIVE;
+        } else {
+            return QueueProcessorCronJob.QueueStatus.PAUSED;
+        }
+    }
+
+
 
     /**
      * Return NONE (No processor), ALIVE (Processor still active) or DEAD
