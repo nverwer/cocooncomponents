@@ -768,7 +768,7 @@ public class QueueProcessorCronJob extends ServiceableCronJob implements Configu
 
 
     /**
-     * Return ACTIVE (No QUEUE_PAUSED_FILE) or PAUSED (Queue is paused)
+     * Return ACTIVE (No QUEUE_PAUSED_FILE present) or PAUSED (Queue is paused)
      *
      * @return QueueStatus: ACTIVE, PAUSED
      */
