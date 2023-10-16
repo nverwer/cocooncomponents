@@ -114,9 +114,6 @@ public class UNCDirectoryGenerator
     protected RE includeRE;
     /** The regular expression for the exclude pattern. */
     protected RE excludeRE;
-    /* The Comparator used to compare files when sorting. */
-    protected Comparator comparator;
-
     /**
      * This is only set to true for the requested directory specified by the
      * <code>src</code> attribute on the generator's configuration.
@@ -211,8 +208,6 @@ public class UNCDirectoryGenerator
 
         this.isRequestedDirectory = false;
         this.attributes = new AttributesImpl();
-
-        this.comparator = getComparator(this.sort, this.linkOptions);
     }
 
     /* (non-Javadoc)
@@ -236,9 +231,9 @@ public class UNCDirectoryGenerator
      * @see DirectoryGenerator.DirValidity
      */
     public SourceValidity getValidity() {
-//        if (this.validity == null) {
-//            this.validity = new DirValidity(this.refreshDelay, this.linkOptions, this.getLogger());
-//        }
+        if (this.validity == null) {
+            this.validity = new DirValidity(this.refreshDelay, this.linkOptions, this.getLogger());
+        }
         return this.validity;
     }
 
@@ -267,7 +262,7 @@ public class UNCDirectoryGenerator
     }
 
 
-    private List<Path> sortFiles(Path path) {
+    private List<Path> sortFiles(Path path, Comparator<Path> comparator) {
 
         long startTime = System.currentTimeMillis();
         List<Path> files = new ArrayList<Path>();
@@ -275,10 +270,7 @@ public class UNCDirectoryGenerator
             DirectoryStream<Path> stream = Files.newDirectoryStream(path);
             try {
                 for (Path p : stream) {
-                    String filename = p.getFileName().toString();
-                    if (isIncludedFilename(filename) && !isExcludedFilename(filename)) {
-                        files.add(p);
-                    }
+                    files.add(p);
                 }
             } finally {
                 stream.close();
@@ -291,10 +283,10 @@ public class UNCDirectoryGenerator
 
         this.getLogger().info("Got directory contents in " + (endTime - startTime) + " milliseconds");
 
-        if (null != this.comparator) {
+        if (null != comparator) {
 
             this.getLogger().info("Sorting " + files.size() + " files.");
-            Collections.sort(files, this.comparator);
+            Collections.sort(files, comparator);
         }
         return files;
     }
@@ -316,29 +308,13 @@ public class UNCDirectoryGenerator
             startNode(DIR_NODE_NAME, path);
             if (depth > 0) {
 
-                /* If a directory is to be sorted, use sortFiles(), otherwise directly use the DirectoryStream */
-                if (!("".equals(sort))) {
-                    List<Path> contents = sortFiles(path);
+                Comparator comparator = getComparator(sort, this.linkOptions);
 
-                    for (Path p : contents) {
+                List<Path> contents = sortFiles(path, comparator);
+
+                for (Path p : contents) {
+                    if (isIncluded(p) && !isExcluded(p)) {
                         addPath(p, depth - 1);
-                    }
-                }
-                else {
-                    try {
-                        DirectoryStream<Path> stream = Files.newDirectoryStream(path);
-                        try {
-                            for (Path p : stream) {
-                                String filename = p.getFileName().toString();
-                                if (isIncludedFilename(filename) && !isExcludedFilename(filename)) {
-                                    addPath(p, depth - 1);
-                                }
-                            }
-                        } finally {
-                            stream.close();
-                        }
-                    } catch(IOException ioEx) {
-                        this.getLogger().error("Error getting list of directory [" + path + "] : " + ioEx.getLocalizedMessage());
                     }
                 }
             }
@@ -346,81 +322,82 @@ public class UNCDirectoryGenerator
         }
 
         else {
-            startNode(FILE_NODE_NAME, path);
-            endNode(FILE_NODE_NAME);
+            if (isIncluded(path) && !isExcluded(path)) {
+                startNode(FILE_NODE_NAME, path);
+                endNode(FILE_NODE_NAME);
+            }
         }
     }
 
+private Comparator getComparator(final String sort, final LinkOption linkOptions) {
 
-    private Comparator getComparator(final String sort, final LinkOption linkOptions) {
+    Comparator comparator = null;
 
-        Comparator comparator = null;
-
-        switch (sort) {
-            case "date":
-                comparator = new Comparator<Path>() {
-                    public int compare(Path o1, Path o2) {
-                        try {
-                            return Files.getLastModifiedTime(o1).compareTo(Files.getLastModifiedTime(o2));
-                        } catch (IOException e) {
-                            // handle exception
-                        }
-                        return 0;
+    switch (sort) {
+        case "date":
+            comparator = new Comparator<Path>() {
+                public int compare(Path o1, Path o2) {
+                    try {
+                        return Files.getLastModifiedTime(o1).compareTo(Files.getLastModifiedTime(o2));
+                    } catch (IOException e) {
+                        // handle exception
                     }
-                };
-                break;
-            case "name":
-                comparator = new Comparator<Path>() {
-                    public int compare(Path o1, Path o2) {
+                    return 0;
+                }
+            };
+            break;
+        case "name":
+            comparator = new Comparator<Path>() {
+                public int compare(Path o1, Path o2) {
+                    if (reverse) {
+                        return o2.getFileName().toString().compareToIgnoreCase(o1.getFileName().toString());
+                    }
+                    return o1.getFileName().toString().compareToIgnoreCase(o2.getFileName().toString());
+                }
+            };
+            break;
+        case "lastmodified":
+            comparator = new Comparator<Path>() {
+                public int compare(Path o1, Path o2) {
+                    try {
                         if (reverse) {
-                            return o2.getFileName().toString().compareToIgnoreCase(o1.getFileName().toString());
+                            return Files.getLastModifiedTime(o2).compareTo(
+                                    Files.getLastModifiedTime(o1));
                         }
-                        return o1.getFileName().toString().compareToIgnoreCase(o2.getFileName().toString());
+                        return Files.getLastModifiedTime(o1).compareTo(
+                                Files.getLastModifiedTime(o2));
+                    } catch (IOException e) {
+                        // handle exception
                     }
-                };
-                break;
-            case "lastmodified":
-                comparator = new Comparator<Path>() {
-                    public int compare(Path o1, Path o2) {
-                        try {
-                            if (reverse) {
-                                return Files.getLastModifiedTime(o2).compareTo(
-                                        Files.getLastModifiedTime(o1));
-                            }
-                            return Files.getLastModifiedTime(o1).compareTo(
-                                    Files.getLastModifiedTime(o2));
-                        } catch (IOException e) {
-                            // handle exception
-                        }
-                        return 0;
-                    }
-                };
-                break;
-            case "directory":
-                comparator = new Comparator<Path>() {
-                    public int compare(Path o1, Path o2) {
-                        boolean o1Dir = Files.isDirectory(o1, linkOptions);
-                        boolean o2Dir = Files.isDirectory(o2, linkOptions);
-                        if (reverse) {
-                            if (o2Dir && !o1Dir)
-                                return -1;
-                            if (!o2Dir && o1Dir)
-                                return 1;
-                            return o2.getFileName().compareTo(o1.getFileName());
-                        }
+                    return 0;
+                }
+            };
+            break;
+        case "directory":
+            comparator = new Comparator<Path>() {
+                public int compare(Path o1, Path o2) {
+                    boolean o1Dir = Files.isDirectory(o1, linkOptions);
+                    boolean o2Dir = Files.isDirectory(o2, linkOptions);
+                    if (reverse) {
                         if (o2Dir && !o1Dir)
-                            return 1;
-                        if (!o2Dir && o1Dir)
                             return -1;
-                        return o1.getFileName().compareTo(o2.getFileName());
+                        if (!o2Dir && o1Dir)
+                            return 1;
+                        return o2.getFileName().compareTo(o1.getFileName());
                     }
-                };
-                break;
-        }
-
-        this.getLogger().info("Created comparator " + comparator + " [sort="+sort+"].");
-        return comparator;
+                    if (o2Dir && !o1Dir)
+                        return 1;
+                    if (!o2Dir && o1Dir)
+                        return -1;
+                    return o1.getFileName().compareTo(o2.getFileName());
+                }
+            };
+            break;
     }
+
+    this.getLogger().info("Created comparator " + comparator + " [sort="+sort+"].");
+    return comparator;
+}
 
     /**
      * Begins a named node and calls setNodeAttributes to set its attributes.
@@ -497,27 +474,26 @@ public class UNCDirectoryGenerator
         return (this.rootRE == null) ? true : this.rootRE.match(path.getFileName().toString());
     }
 
-
     /**
-     * Determines if a given Filename shall be included.
-     *
-     * @param filename  the filename to check
-     * @return true if the filename shall be visible or the include Pattern is <code>null</code>,
+     * Determines if a given File shall be visible.
+     * 
+     * @param path  the File to check
+     * @return true if the File shall be visible or the include Pattern is <code>null</code>,
      *         false otherwise.
      */
-    protected boolean isIncludedFilename(String f) {
-        return (this.includeRE == null) ? true : this.includeRE.match(f);
+    protected boolean isIncluded(Path path) {
+        return (this.includeRE == null) ? true : this.includeRE.match(path.getFileName().toString());
     }
 
     /**
-     * Determines if a given filename should be excluded.
+     * Determines if a given File shall be excluded from viewing.
      * 
-     * @param filename  the filename to check
-     * @return false if the given filename shall not be excluded or the exclude Pattern is <code>null</code>,
+     * @param path  the File to check
+     * @return false if the given File shall not be excluded or the exclude Pattern is <code>null</code>,
      *         true otherwise.
      */
-    protected boolean isExcludedFilename(String f) {
-        return (this.excludeRE == null) ? false : this.excludeRE.match(f);
+    protected boolean isExcluded(Path path) {
+        return (this.excludeRE == null) ? false : this.excludeRE.match(path.getFileName().toString());
     }
 
     /**

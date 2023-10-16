@@ -30,6 +30,7 @@ public class PipelineSlowdownTransformerJustOnce extends AbstractTransformer {
     super.startDocument();
     try {
       Thread.sleep(msecs);
+      System.err.print("Paused " + msecs + " milliseconds");
     } catch (Exception e) {
     }
   }
