@@ -19,6 +19,7 @@ import org.xml.sax.XMLFilter;
 import net.sf.saxon.TransformerFactoryImpl;
 
 /**
+ * ONLY USE THIS CLASS FOR SAXON VERSIONS BELOW 11. THIS CLASS IS NO LONGER RELEVANT FROM VERSION 11 ONWARDS.
  * The Saxon transformer sends messages from <xsl:message> to a messageEmitter, not to the errorListener,
  * see https://stackoverflow.com/questions/4695489/capture-xslmessage-output-in-java.
  * This can be changed in the underlying controller (https://www.saxonica.com/html/documentation/javadoc/index.html?net/sf/saxon/Controller.html).
@@ -32,12 +33,12 @@ import net.sf.saxon.TransformerFactoryImpl;
  */
 
 public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
-  
+
   /**
    * The underlying Saxon TransformerFactoryImpl that we use.
    */
   private net.sf.saxon.TransformerFactoryImpl saxonTransformerFactory;
-  
+
   /**
    * Constructor of the wrapper around Saxon's TransformerFactoryImpl
    * @throws TransformerConfigurationException
@@ -45,17 +46,17 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   protected SaxonTransformerFactoryImpl() throws TransformerConfigurationException {
     try {
       // Prefer the ProfessionalTransformerFactory (commercial Saxon) if it is present.
-      saxonTransformerFactory = (TransformerFactoryImpl) Class.forName("com.saxonica.config.ProfessionalTransformerFactory").newInstance();
+      saxonTransformerFactory = (TransformerFactoryImpl) Class.forName("com.saxonica.config.ProfessionalTransformerFactory").getDeclaredConstructor().newInstance();
     } catch (Exception ex1) {
       try {
         // If only the open source version is present, use that.
-        saxonTransformerFactory = (TransformerFactoryImpl) Class.forName("net.sf.saxon.TransformerFactoryImpl").newInstance();
+        saxonTransformerFactory = (TransformerFactoryImpl) Class.forName("net.sf.saxon.TransformerFactoryImpl").getDeclaredConstructor().newInstance();
       } catch (Exception ex2) {
         throw new TransformerConfigurationException("It looks like you do not have the Saxon jar.", ex2);
       }
     }
   }
-  
+
   /**
    * Modify a Saxon Transformer, so that it sends messages from <xsl:message> to the errorListener, not to the messageEmitter.
    * This should be applied whenever a Transformer is returned from a method.
@@ -94,7 +95,7 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   public TransformerHandler newTransformerHandler() throws TransformerConfigurationException {
     return new SaxonTransformerHandler(saxonTransformerFactory.newTransformerHandler());
   }
-  
+
   /**
    * Process the Source into a Transformer object.
    * Modify the transformer so that messages are re-routed.
@@ -114,7 +115,7 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   }
 
   // All other methods are passed on to the saxonTransformerFactory.
-  
+
   @Override
   public TemplatesHandler newTemplatesHandler() throws TransformerConfigurationException {
     return saxonTransformerFactory.newTemplatesHandler();
@@ -179,20 +180,20 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
   public ErrorListener getErrorListener() {
     return saxonTransformerFactory.getErrorListener();
   }
-  
-  
+
+
   /**
    * A transformer handler that wraps the transformer handler from Saxon.
    * All this does is modify the Transformer returned by getTransformer, so it re-routes messages.
    */
   class SaxonTransformerHandler implements TransformerHandler {
-    
+
     private TransformerHandler transformerHandler;
-    
+
     public SaxonTransformerHandler(TransformerHandler transformerHandler) {
       this.transformerHandler = transformerHandler;
     }
-    
+
     /**
      * Modify the transformer.
      */
@@ -202,7 +203,7 @@ public class SaxonTransformerFactoryImpl extends SAXTransformerFactory {
     }
 
     // All other methods are passed on.
-    
+
     @Override
     public void setDocumentLocator(Locator locator) {
       transformerHandler.setDocumentLocator(locator);
