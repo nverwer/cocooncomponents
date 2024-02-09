@@ -76,6 +76,9 @@ import org.xml.sax.helpers.AttributesImpl;
  *   <li>
  *     <b>field-names</b>: whether to output field names for every record (default: <i>true</i>).
  *   </li>
+ *   <li>
+ *     <b>comments</b>: Can be '#' to ignore lines that start with '#'.
+ *   </li>
  * </ul>
  *
  * <p>The generated output will look something like the following:</p>
@@ -153,6 +156,8 @@ public class CSVGenerator2 extends FileGenerator {
     private boolean emptyFields = false;
     /** Output field names for every record? */
     private boolean fieldNames = true;
+    /** Skip comment lines that start with '#' if this is '#'. */
+    private String comments = null;
 
     /**
      * <p>Create a new {@link CSVGenerator} instance.</p>
@@ -169,6 +174,7 @@ public class CSVGenerator2 extends FileGenerator {
         super.recycle();
         emptyFields = false;
         fieldNames = true;
+        comments = null;
         encoding = DEFAULT_ENCODING;
         separator = DEFAULT_SEPARATOR.charAt(0);
         escape = DEFAULT_ESCAPE.charAt(0);
@@ -194,6 +200,7 @@ public class CSVGenerator2 extends FileGenerator {
 
         emptyFields = parameters.getParameterAsBoolean("empty-fields", false);
         fieldNames = parameters.getParameterAsBoolean("field-names", true);
+        comments = parameters.getParameter("comments", null);
         encoding = parameters.getParameter("encoding", DEFAULT_ENCODING);
         separator = parameters.getParameter("separator", DEFAULT_SEPARATOR).charAt(0);
         escape = parameters.getParameter("escape", DEFAULT_ESCAPE).charAt(0);
@@ -245,39 +252,41 @@ public class CSVGenerator2 extends FileGenerator {
             int curr = -1;
 
             /* Parse the file reading characters one-by-one */
-            while ((curr = csv.read()) >= 0 && (maxrecords == UNLIMITED_MAXRECORDS || recordnumber <= maxrecords)) {
-
-                /* Process any occurrence of the escape character */
-                if (curr == escape) {
-                    if ((unescaped) && (prev == escape)) {
-                        buffer.write(escape);
+            curr = csv.read();
+            while (curr >= 0 && (maxrecords == UNLIMITED_MAXRECORDS || recordnumber <= maxrecords)) {
+                if ("#".equals(comments) && csv.getColumnNumber() == 1 && curr == '#') {
+                    /* Process comment lines. */
+                    /* Read characters until a line ending is encountered. */
+                    while ((curr = csv.read()) >= 0 && !((curr == '\r') || (curr == '\n')));
+                    /* Read until the first character after line endings is encountered. */
+                    while ((curr = csv.read()) >= 0 && ((curr == '\r') || (curr == '\n')));
+                    /* We are out of the comment line, re-enter the loop. */
+                    continue;
+                } else {
+                    if (curr == escape) {
+                        /* Process any occurrence of the escape character */
+                        if ((unescaped) && (prev == escape)) {
+                            buffer.write(escape);
+                        }
+                        unescaped = ! unescaped;
+                    } else if ((unescaped) && (curr == separator)) {
+                        /* Process any occurrence of the field separator */
+                        dumpField();
+                    } else if ((unescaped) && ((curr == '\r') || (curr == '\n'))) {
+                        /* Process newline characters, ignore empty lines. */
+                        if (prev != '\r' && prev != '\n') {
+                          dumpField();
+                          dumpRecord();
+                          recordnumber ++;
+                        }
+                    } else {
+                      /* Any other character simply gets added to the buffer */
+                      buffer.write(curr);
                     }
-                    unescaped = ! unescaped;
+                    /* Read next character. */
                     prev = curr;
-                    continue;
+                    curr = csv.read();
                 }
-
-                /* Process any occurrence of the field separator */
-                if ((unescaped) && (curr == separator)) {
-                    dumpField();
-                    prev = curr;
-                    continue;
-                }
-
-                /* Process newline characters, ignore empty lines. */
-                if ((unescaped) && ((curr == '\r') || (curr == '\n'))) {
-                    if (prev != '\r' && prev != '\n') {
-                      dumpField();
-                      dumpRecord();
-                      recordnumber ++;
-                    }
-                    prev = curr;
-                    continue;
-                }
-
-                /* Any other character simply gets added to the buffer */
-                buffer.write(curr);
-                prev = curr;
             }
 
             /* Terminate any hanging open record element */
