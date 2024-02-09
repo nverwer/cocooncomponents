@@ -257,9 +257,16 @@ public class CSVGenerator2 extends FileGenerator {
                 if ("#".equals(comments) && csv.getColumnNumber() == 1 && curr == '#') {
                     /* Process comment lines. */
                     /* Read characters until a line ending is encountered. */
-                    while ((curr = csv.read()) >= 0 && !((curr == '\r') || (curr == '\n')));
+                    while ((curr = csv.read()) >= 0 && !((curr == '\r') || (curr == '\n'))) buffer.write(curr);
                     /* Read until the first character after line endings is encountered. */
                     while ((curr = csv.read()) >= 0 && ((curr == '\r') || (curr == '\n')));
+                    /* Write the comment to the output. */
+                    indent(4);
+                    this.startElement("comment");
+                    char array[] = buffer.toCharArray();
+                    contentHandler.characters(array, 0, array.length);
+                    this.endElement("comment");
+                    buffer.reset();
                     /* We are out of the comment line, re-enter the loop. */
                     continue;
                 } else {
