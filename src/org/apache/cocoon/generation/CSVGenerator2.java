@@ -253,8 +253,9 @@ public class CSVGenerator2 extends FileGenerator {
 
             /* Parse the file reading characters one-by-one */
             curr = csv.read();
+            int charpos = 0;
             while (curr >= 0 && (maxrecords == UNLIMITED_MAXRECORDS || recordnumber <= maxrecords)) {
-                if ("#".equals(comments) && csv.getColumnNumber() == 1 && curr == '#') {
+                if ("#".equals(comments) && charpos == 0 && curr == '#') {
                     /* Process comment lines. */
                     /* Read characters until a line ending is encountered. */
                     while ((curr = csv.read()) >= 0 && !((curr == '\r') || (curr == '\n'))) buffer.write(curr);
@@ -286,6 +287,7 @@ public class CSVGenerator2 extends FileGenerator {
                           dumpRecord();
                           recordnumber ++;
                         }
+                        charpos = -1;
                     } else {
                       /* Any other character simply gets added to the buffer */
                       buffer.write(curr);
@@ -293,6 +295,7 @@ public class CSVGenerator2 extends FileGenerator {
                     /* Read next character. */
                     prev = curr;
                     curr = csv.read();
+                    ++charpos;
                 }
             }
 
