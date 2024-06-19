@@ -368,6 +368,7 @@ public class SparqlTransformer extends AbstractSAXPipelineTransformer {
         if (showErrors) {
           AttributesImpl attrs = new AttributesImpl();
           attrs.addCDATAAttribute("status", ""+responseCode+" "+statusText);
+          attrs.addCDATAAttribute("url", ""+url);
           xmlConsumer.startElement(SPARQL_NAMESPACE_URI, "error", "sparql:error", attrs);
           xmlConsumer.characters(responseBody.toCharArray(), 0, responseBody.length());
           xmlConsumer.endElement(SPARQL_NAMESPACE_URI, "error", "sparql:error");
