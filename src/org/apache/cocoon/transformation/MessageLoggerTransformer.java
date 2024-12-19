@@ -57,7 +57,7 @@ import org.xml.sax.SAXException;
  * The level can be 'error', 'warn', 'warning', 'info'. The default level is 'info'.
  * This will look for `message` elements in the transformer namespace and log their contents:
  * ```
- * <log:message target="log" level="info">Hello, world.</log:message>
+ * <log:message xmlns:log="http://apache.org/cocoon/message-logger/1.0" target="log" level="info">Hello, world.</log:message>
  * ```
  * The level can be 'error', 'warn', 'warning', 'info'. The default level is 'info'.
  *
